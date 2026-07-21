@@ -13,6 +13,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		await api.remove('todos', id);
 		return json({ ok: true });
 	}
+	if (op === 'note-create') return json(await api.create('notes', data));
+	if (op === 'note-delete') {
+		await api.remove('notes', id);
+		return json({ ok: true });
+	}
 	if (op === 'create') return json(await api.create('projects', data));
 	throw error(400, `unknown op: ${op}`);
 };

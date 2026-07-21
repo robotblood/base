@@ -66,11 +66,13 @@ export const MODULES: ModuleConfig[] = [
 			{ header: 'When', field: 'meeting_time', sort: 'date' },
 			{ header: 'Status', field: 'status', render: 'badge' },
 			{ header: 'Type', field: 'meeting_type' },
+			{ header: 'Project', field: 'project_id_label', hidden: true },
 			{ header: 'Tags', field: 'tags', render: 'tags', hidden: true }
 		],
 		fields: [
 			{ name: 'title', label: 'Title', type: 'text', required: true },
 			{ name: 'kind', label: 'Kind', type: 'select', options: ['note', 'meeting', 'journal'] },
+			{ name: 'project_id', label: 'Project', type: 'relation', ref: 'projects' },
 			{ name: 'meeting_type', label: 'Meeting type', type: 'text' },
 			{ name: 'meeting_time', label: 'When', type: 'datetime' },
 			{

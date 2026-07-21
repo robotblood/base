@@ -30,7 +30,17 @@ export function toTask(todo: Row): Task {
 	};
 }
 
-export function mapProject(row: Row, todos: Row[] = []): Project {
+export function toProjNote(note: Row) {
+	return {
+		id: String(note.id),
+		date: str(note.meeting_time).slice(0, 10) || str(note.created_at).slice(0, 10),
+		title: str(note.title),
+		body: str(note.body),
+		kind: str(note.kind) || 'note'
+	};
+}
+
+export function mapProject(row: Row, todos: Row[] = [], notes: Row[] = []): Project {
 	const id = String(row.id);
 	const health = str(row.health);
 	return {
@@ -53,7 +63,10 @@ export function mapProject(row: Row, todos: Row[] = []): Project {
 		phases: arr(row.phases),
 		tasks: todos.filter((t) => String(t.project_id) === id).map(toTask),
 		milestones: arr(row.milestones),
-		notes: arr(row.journal),
+		notes: notes
+			.filter((n) => String(n.project_id) === id)
+			.map(toProjNote)
+			.sort((a, b) => (a.date < b.date ? 1 : -1)),
 		files: [],
 		linked: arr(row.linked),
 		people: arr(row.people),

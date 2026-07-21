@@ -24,5 +24,7 @@ export const persist = {
 	create: (data: Row) => send({ op: 'create', data }),
 	task: (id: string, patch: Row) => send({ op: 'task', id, patch }),
 	taskCreate: (data: Row) => send({ op: 'task-create', data }),
-	taskDelete: (id: string) => send({ op: 'task-delete', id })
+	taskDelete: (id: string) => send({ op: 'task-delete', id }),
+	noteCreate: (data: Row) => send({ op: 'note-create', data }),
+	noteDelete: (id: string) => send({ op: 'note-delete', id })
 };

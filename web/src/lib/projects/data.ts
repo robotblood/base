@@ -23,10 +23,13 @@ export interface Milestone {
 	date: string;
 	done: boolean;
 }
+// A real Notes & Meetings record linked to the project (notes.project_id).
 export interface ProjNote {
+	id: string;
 	date: string;
 	title: string;
 	body: string;
+	kind: string; // note | meeting | journal
 }
 export interface ProjFile {
 	name: string;

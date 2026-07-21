@@ -15,6 +15,7 @@
 		type Project
 	} from '$lib/projects/data';
 	import { kindInfo } from '$lib/projects/kinds';
+	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
 	import AudioFileRow from './AudioFileRow.svelte';
 	import FileRowActions from './FileRowActions.svelte';
 	import MediaThumb from './MediaThumb.svelte';
@@ -68,6 +69,7 @@
 	let linkSel = $state('');
 	let linkDraft = $state({ label: '', url: '' });
 	let dlDraft = $state({ name: '', spec: '' });
+	let noteDraft = $state('');
 
 	function submitTask() {
 		if (!taskDraft.title.trim()) return;
@@ -93,6 +95,11 @@
 		if (!dlDraft.name.trim()) return;
 		t.addDeliverable(p.id, dlDraft.name, dlDraft.spec);
 		dlDraft = { name: '', spec: '' };
+	}
+	function submitNote() {
+		if (!noteDraft.trim()) return;
+		void t.addNote(p.id, noteDraft);
+		noteDraft = '';
 	}
 
 	const cardClass = 'rounded-[12px] border bg-card p-[18px_20px]';
@@ -713,37 +720,51 @@
 
 		{#snippet notesC()}
 			<div class={cardClass}>
-				<div class="{sectionLabel} mb-1.5 flex items-center justify-between">
-					<span>NOTES &amp; MEETINGS</span>
-					<button onclick={() => t.addNote(p.id)} class={ghostBtn}>+ Add</button>
+				<div class="{sectionLabel} mb-1.5">
+					NOTES &amp; MEETINGS
+					{#if p.notes.length}<span class="text-muted-foreground/70">· {p.notes.length}</span>{/if}
 				</div>
-				{#each p.notes as n, i (i)}
+				{#each p.notes as n, i (n.id)}
 					<div class="group/nt border-t py-[11px] first:border-t-0">
-						<div class="flex items-center justify-between gap-2">
-							<input
-								value={n.title}
-								onchange={(e) => t.updateNote(p.id, i, { title: e.currentTarget.value })}
-								aria-label="Note title"
-								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px] font-semibold"
-							/>
+						<div class="flex items-baseline justify-between gap-2">
+							<a
+								href="/notes/{n.id}"
+								class="min-w-0 flex-1 truncate text-[13.5px] font-semibold hover:underline"
+								>{n.title}</a
+							>
+							{#if n.kind !== 'note'}
+								<span
+									class="flex-none rounded-full bg-accent px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.05em] text-foreground/70"
+									>{n.kind}</span
+								>
+							{/if}
 							<span class="flex-none font-mono text-[10px] text-muted-foreground">{fmtISO(n.date)}</span>
 							<button
 								onclick={() => t.removeNote(p.id, i)}
-								title="Delete note"
+								title="Delete this note (the record itself)"
 								class="{rowX} group-hover/nt:block"><X class="size-3.5" /></button
 							>
 						</div>
-						<textarea
-							value={n.body}
-							rows="2"
-							placeholder="Write it down…"
-							onchange={(e) => t.updateNote(p.id, i, { body: e.currentTarget.value })}
-							class="{ghost} mt-1 w-full resize-y px-1 py-0.5 text-[13px] leading-[1.5] text-foreground/70"
-						></textarea>
+						{#if n.body.trim()}
+							<a href="/notes/{n.id}" class="mt-1 block max-h-[110px] overflow-hidden">
+								<MarkdownDoc source={n.body} />
+							</a>
+						{/if}
 					</div>
 				{:else}
-					<div class="pt-1.5 text-[13px] text-muted-foreground">No notes yet.</div>
+					<div class="pt-1.5 text-[13px] text-muted-foreground">
+						No notes yet — they're real Notes &amp; Meetings records, linked here.
+					</div>
 				{/each}
+				<div class="mt-2 flex items-center gap-2 border-t pt-3">
+					<input
+						bind:value={noteDraft}
+						onkeydown={(e) => e.key === 'Enter' && submitNote()}
+						placeholder="New note — title, Enter, write…"
+						class={addInput}
+					/>
+					<button onclick={submitNote} disabled={!noteDraft.trim()} class={addBtn}>Add</button>
+				</div>
 			</div>
 		{/snippet}
 

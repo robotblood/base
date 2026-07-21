@@ -48,6 +48,8 @@ class Note(Base, table=True):
     title: str = Field(index=True)
     kind: str = Field(default="note", index=True)  # note | meeting | journal
     body: Optional[str] = None  # markdown page content
+    # Link to a projects.id (loose reference, same convention as todos).
+    project_id: Optional[int] = Field(default=None, index=True)
     status: Optional[str] = None
     meeting_type: Optional[str] = None
     attendees: list[str] = Field(default_factory=list, sa_type=ARRAY(String))

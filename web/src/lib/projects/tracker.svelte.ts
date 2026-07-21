@@ -1,10 +1,11 @@
 // Interactive state for the Projects tracker. Initial data comes from the
 // server load (real FastAPI rows shaped by `map.ts`); mutations apply
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
+import { goto } from '$app/navigation';
 import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile, type Song } from './data';
 import { emptyReady, kindInfo, presetPhases } from './kinds';
-import { mapProject, toTask } from './map';
+import { mapProject, toProjNote, toTask } from './map';
 import { persist } from './sync';
 
 export type ListView = 'board' | 'list' | 'timeline';
@@ -262,27 +263,26 @@ export class Tracker {
 		p.milestones.splice(i, 1);
 		this.saveField(pid, 'milestones');
 	}
-	addNote(pid: string) {
+	// Project notes are real Notes & Meetings records (notes.project_id).
+	// Creating one takes you straight into its live editor.
+	async addNote(pid: string, title: string) {
 		const p = this.find(pid);
-		if (!p) return;
-		p.notes.unshift({ date: isoToday(), title: 'New note', body: '' });
-		this.saveNotes(pid);
-	}
-	updateNote(pid: string, i: number, patch: { title?: string; body?: string; date?: string }) {
-		const n = this.find(pid)?.notes[i];
-		if (!n) return;
-		Object.assign(n, patch);
-		this.saveNotes(pid);
+		if (!p || !title.trim()) return;
+		const row = await persist.noteCreate({
+			title: title.trim(),
+			kind: 'note',
+			project_id: Number(pid)
+		});
+		if (!row) return;
+		p.notes.unshift(toProjNote(row));
+		await goto(`/notes/${row.id}`);
 	}
 	removeNote(pid: string, i: number) {
 		const p = this.find(pid);
-		if (!p) return;
+		const n = p?.notes[i];
+		if (!p || !n) return;
 		p.notes.splice(i, 1);
-		this.saveNotes(pid);
-	}
-	private saveNotes(pid: string) {
-		const p = this.find(pid);
-		if (p) void persist.update(pid, { journal: $state.snapshot(p.notes) });
+		void persist.noteDelete(n.id);
 	}
 	addPerson(pid: string) {
 		const p = this.find(pid);
