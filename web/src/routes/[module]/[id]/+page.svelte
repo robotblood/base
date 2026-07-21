@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
-	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
+	import NoteEditor from '$lib/components/editor/NoteEditor.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
@@ -54,21 +53,20 @@
 			: null
 	);
 
-	// Markdown document (modules with a docField, i.e. notes): rendered by
-	// default, with a Write tab. bodyText backs both tabs and rides into the
-	// record form via a hidden input.
+	// Markdown document (modules with a docField, i.e. notes): edited live in
+	// the block editor (formatting as you type, "/" menu), with a raw-markdown
+	// tab as the escape hatch. bodyText backs both and rides into the record
+	// form via a hidden input.
 	let bodyText = $state('');
-	let docTab = $state<'preview' | 'write'>('preview');
-	// ?edit=1 (quick-create) opens Write, but only on arrival — after a save
-	// the document flips to its formatted view.
-	let honorEditParam = true;
+	let docTab = $state<'doc' | 'md'>('doc');
 	$effect(() => {
 		if (!mod.docField) return;
-		const v = String(item[mod.docField] ?? '');
-		bodyText = v;
-		docTab = v && !(honorEditParam && page.url.searchParams.get('edit') === '1') ? 'preview' : 'write';
-		honorEditParam = false;
+		item.id; // re-sync when the record changes
+		bodyText = String(item[mod.docField] ?? '');
 	});
+	function saveDoc() {
+		(document.getElementById('record-form') as HTMLFormElement | null)?.requestSubmit();
+	}
 
 	let media = $state<MediaItem[]>([]);
 	let mediaCapped = $state(false);
@@ -290,48 +288,41 @@
 				<div class="inline-flex gap-0.5 rounded-[8px] bg-muted p-[3px]">
 					<button
 						type="button"
-						onclick={() => (docTab = 'preview')}
-						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'preview'
+						onclick={() => (docTab = 'doc')}
+						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'doc'
 							? 'bg-primary text-primary-foreground'
-							: 'text-foreground/70'}">Preview</button
+							: 'text-foreground/70'}">Doc</button
 					>
 					<button
 						type="button"
-						onclick={() => (docTab = 'write')}
-						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'write'
+						onclick={() => (docTab = 'md')}
+						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'md'
 							? 'bg-primary text-primary-foreground'
-							: 'text-foreground/70'}">Write</button
+							: 'text-foreground/70'}">Markdown</button
 					>
 				</div>
 			</div>
-			{#if docTab === 'write'}
-				<!-- svelte-ignore a11y_autofocus -->
+			{#if docTab === 'md'}
 				<textarea
 					bind:value={bodyText}
-					autofocus
 					onkeydown={(e) => {
 						if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
 							e.preventDefault();
-							(document.getElementById('record-form') as HTMLFormElement | null)?.requestSubmit();
+							saveDoc();
 						}
 					}}
 					rows={Math.min(28, Math.max(10, bodyText.split('\n').length + 3))}
-					placeholder={'# Heading\n\nWrite markdown — headings, lists, - [ ] checkboxes, **bold**…\nSave to see it formatted.'}
+					placeholder="Raw markdown…"
 					class="w-full resize-y rounded-[9px] border bg-background px-3.5 py-3 font-mono text-[13px] leading-[1.6] outline-none focus:border-ring"
 				></textarea>
-				<div class="font-mono text-[10px] text-muted-foreground">
-					Markdown — Save formats it. Cmd/Ctrl+Enter saves.
-				</div>
-			{:else if bodyText.trim()}
-				<MarkdownDoc source={bodyText} />
 			{:else}
-				<button
-					type="button"
-					onclick={() => (docTab = 'write')}
-					class="cursor-pointer pt-1 text-left text-[13px] text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground/80"
-					>Empty — start writing.</button
-				>
+				{#key `${item.id}:${docTab}`}
+					<NoteEditor value={bodyText} onchange={(md) => (bodyText = md)} onsave={saveDoc} />
+				{/key}
 			{/if}
+			<div class="font-mono text-[10px] text-muted-foreground">
+				Type '/' for blocks · markdown shortcuts as you type · Cmd/Ctrl+Enter saves
+			</div>
 		</section>
 	{/if}
 
