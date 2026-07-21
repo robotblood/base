@@ -26,8 +26,7 @@
 	const du = $derived(dueInfo(p.due, p.status));
 	const h = $derived(healthVM(p.health));
 	const pct = $derived(progress(p));
-	const isLive = $derived(!!p.rundown);
-	const showRundown = $derived(isLive && t.wsTab === 'rundown');
+	const showRundown = $derived(t.wsTab === 'rundown');
 
 	const doneCount = $derived(p.tasks.filter((x) => x.done).length);
 
@@ -118,23 +117,21 @@
 		{/each}
 	</div>
 
-	<!-- Live-project tabs -->
-	{#if isLive}
-		<div class="mb-[22px] inline-flex gap-0.5 rounded-[9px] bg-muted p-[3px]">
-			<button
-				onclick={() => (t.wsTab = 'overview')}
-				class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab !== 'rundown'
-					? 'bg-primary text-primary-foreground'
-					: 'text-foreground/70'}">Overview</button
-			>
-			<button
-				onclick={() => (t.wsTab = 'rundown')}
-				class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab === 'rundown'
-					? 'bg-primary text-primary-foreground'
-					: 'text-foreground/70'}">Show Rundown</button
-			>
-		</div>
-	{/if}
+	<!-- Overview / rundown tabs -->
+	<div class="mb-[22px] inline-flex gap-0.5 rounded-[9px] bg-muted p-[3px]">
+		<button
+			onclick={() => (t.wsTab = 'overview')}
+			class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab !== 'rundown'
+				? 'bg-primary text-primary-foreground'
+				: 'text-foreground/70'}">Overview</button
+		>
+		<button
+			onclick={() => (t.wsTab = 'rundown')}
+			class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab === 'rundown'
+				? 'bg-primary text-primary-foreground'
+				: 'text-foreground/70'}">Show Rundown</button
+		>
+	</div>
 
 	{#if showRundown}
 		<ProjectRundown {t} {p} />

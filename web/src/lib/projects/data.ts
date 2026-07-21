@@ -52,8 +52,9 @@ export interface Performer {
 	part: string;
 }
 export interface SongFile {
-	type: string; // playback | click | visuals | lighting | chart | track
+	type: string; // playback | click | visuals | lighting | chart | track | model
 	name: string;
+	rel?: string; // path within the project folder (real, on-disk file)
 }
 export interface Resource {
 	type: string; // link | doc | contact
@@ -198,6 +199,14 @@ export function fmtDur(sec: number): string {
 	return m + ':' + String(s).padStart(2, '0');
 }
 
+// Accepts "3:45" or plain seconds ("225") — the inverse of fmtDur for inputs.
+export function parseDur(v: string): number {
+	const m = /^(\d+):([0-5]?\d)$/.exec(v.trim());
+	if (m) return +m[1] * 60 + +m[2];
+	const n = parseInt(v, 10);
+	return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
 export function initials(name: string): string {
 	return name
 		.split(' ')
@@ -208,7 +217,7 @@ export function initials(name: string): string {
 }
 
 // File-type preview swatch: kind, accent color, and a deterministic waveform.
-export type FileKind = 'audio' | 'video' | 'light' | 'image' | 'doc';
+export type FileKind = 'audio' | 'video' | 'light' | 'image' | 'model' | 'doc';
 export interface FilePreview {
 	ext: string;
 	color: string;
@@ -220,6 +229,7 @@ const FILE_COLORS: Record<FileKind, string> = {
 	video: '#1b1917',
 	light: '#b23a26',
 	image: '#2f7d5b',
+	model: '#7d5ba6',
 	doc: '#8a8478'
 };
 export function filePreview(name: string, hint?: string): FilePreview {
@@ -229,9 +239,12 @@ export function filePreview(name: string, hint?: string): FilePreview {
 	else if (hint === 'visuals') kind = 'video';
 	else if (hint === 'lighting') kind = 'light';
 	else if (hint === 'chart') kind = 'doc';
+	else if (hint === 'model') kind = 'model';
 	else if (['wav', 'mp3', 'aif', 'aiff', 'aac', 'm4a'].indexOf(ext) >= 0) kind = 'audio';
 	else if (['mov', 'mp4', 'mpg', 'mpeg', 'prproj', 'avi'].indexOf(ext) >= 0) kind = 'video';
 	else if (['png', 'jpg', 'jpeg', 'gif', 'ai', 'psd'].indexOf(ext) >= 0) kind = 'image';
+	else if (['blend', 'fbx', 'obj', 'glb', 'gltf', 'c4d', 'ma', 'mb', 'stl', 'usd', 'usdz'].indexOf(ext) >= 0)
+		kind = 'model';
 	else kind = 'doc';
 	let seed = 0;
 	for (let i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) >>> 0;
@@ -250,7 +263,8 @@ export const SONG_FILE_MAP: Record<string, { code: string; color: string }> = {
 	visuals: { code: 'VIS', color: '#2f7d5b' },
 	lighting: { code: 'LIGHT', color: '#b23a26' },
 	chart: { code: 'CHART', color: '#8a8478' },
-	track: { code: 'TRACK', color: '#3a6ea5' }
+	track: { code: 'TRACK', color: '#3a6ea5' },
+	model: { code: '3D', color: '#7d5ba6' }
 };
 export const RES_ICON: Record<string, string> = { link: '↗', doc: '▤', contact: '◍' };
 export const LINK_CODE_MAP: Record<string, { code: string; color: string }> = {

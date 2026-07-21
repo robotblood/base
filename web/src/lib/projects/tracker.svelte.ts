@@ -2,7 +2,7 @@
 // server load (real FastAPI rows shaped by `map.ts`); mutations apply
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
 import { toast } from 'svelte-sonner';
-import { isoToday, type Project, type ProjFile } from './data';
+import { isoToday, type Project, type ProjFile, type Song } from './data';
 import { mapProject } from './map';
 import { persist } from './sync';
 
@@ -151,6 +151,83 @@ export class Tracker {
 		const p = this.find(pid);
 		if (p?.rundown) void persist.update(pid, { rundown: $state.snapshot(p.rundown) });
 	}
+	private findSong(pid: string, sid: string) {
+		return this.find(pid)
+			?.rundown?.sections.flatMap((s) => s.songs)
+			.find((s) => s.id === sid);
+	}
+	// Keep the printed song numbers sequential across sections.
+	private renumber(pid: string) {
+		let n = 0;
+		for (const sec of this.find(pid)?.rundown?.sections ?? [])
+			for (const s of sec.songs) s.order = ++n;
+	}
+	createRundown(pid: string) {
+		const p = this.find(pid);
+		if (!p || p.rundown) return;
+		p.rundown = { sections: [{ name: 'ACT I', songs: [] }] };
+		this.wsTab = 'rundown';
+		this.saveRundown(pid);
+	}
+	addSection(pid: string) {
+		const r = this.find(pid)?.rundown;
+		if (!r) return;
+		r.sections.push({ name: `SECTION ${r.sections.length + 1}`, songs: [] });
+		this.saveRundown(pid);
+	}
+	renameSection(pid: string, si: number, name: string) {
+		const sec = this.find(pid)?.rundown?.sections[si];
+		if (!sec || !name.trim() || sec.name === name.trim()) return;
+		sec.name = name.trim();
+		this.saveRundown(pid);
+	}
+	removeSection(pid: string, si: number) {
+		const r = this.find(pid)?.rundown;
+		if (!r || r.sections[si]?.songs.length) return; // only empty sections
+		r.sections.splice(si, 1);
+		this.saveRundown(pid);
+	}
+	updateSong(pid: string, sid: string, patch: Partial<Song>) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		Object.assign(song, patch);
+		this.saveRundown(pid);
+	}
+	removeSong(pid: string, sid: string) {
+		for (const sec of this.find(pid)?.rundown?.sections ?? []) {
+			const i = sec.songs.findIndex((s) => s.id === sid);
+			if (i >= 0) {
+				sec.songs.splice(i, 1);
+				this.renumber(pid);
+				this.saveRundown(pid);
+				return;
+			}
+		}
+	}
+	attachSongFile(pid: string, sid: string, file: { type: string; name: string; rel?: string }) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		song.files.push(file);
+		this.saveRundown(pid);
+	}
+	removeSongFile(pid: string, sid: string, index: number) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		song.files.splice(index, 1);
+		this.saveRundown(pid);
+	}
+	updatePerformer(pid: string, sid: string, index: number, patch: { name?: string; part?: string }) {
+		const pf = this.findSong(pid, sid)?.performers[index];
+		if (!pf) return;
+		Object.assign(pf, patch);
+		this.saveRundown(pid);
+	}
+	removePerformer(pid: string, sid: string, index: number) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		song.performers.splice(index, 1);
+		this.saveRundown(pid);
+	}
 	toggleSong(id: string) {
 		this.openSongs[id] = !this.openSongs[id];
 	}
@@ -180,6 +257,7 @@ export class Tracker {
 			ready: { files: false, cues: false, rehearsed: false },
 			notes: ''
 		});
+		this.renumber(pid);
 		this.saveRundown(pid);
 	}
 	addPerformer(pid: string, sid: string) {

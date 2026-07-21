@@ -31,6 +31,12 @@
 			<div style="height:2px;background:#c9c3b4;border-radius:2px;width:70%;"></div>
 			<div style="height:2px;background:#c9c3b4;border-radius:2px;"></div>
 		</div>
+	{:else if preview.kind === 'model'}
+		<div
+			style="width:100%;height:100%;background:linear-gradient(135deg,#5d4382,#9b7fc4);border-radius:{radius}px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:{size >= 40 ? 13 : 12}px;"
+		>
+			◇
+		</div>
 	{:else if preview.kind === 'image'}
 		<div
 			style="width:100%;height:100%;background:linear-gradient(135deg,#2f7d5b,#9ec97f);border-radius:{radius}px;"
