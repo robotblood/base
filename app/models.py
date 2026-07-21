@@ -125,3 +125,4 @@ class Person(Base, table=True):
     name: str = Field(index=True)
     about: Optional[str] = None
     membership_type: Optional[str] = None
+    path: Optional[str] = None  # on-disk folder (photos, shared work) for media previews

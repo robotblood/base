@@ -52,6 +52,11 @@
 			? (item.raw as Record<string, any>)
 			: null
 	);
+	// A linked folder from either era: the first-class path column (wins) or
+	// the imported raw snapshot. Gates the media gallery + folder actions.
+	const folderPath = $derived(
+		(typeof item.path === 'string' && item.path) || (archive?.path as string | undefined) || null
+	);
 
 	// Markdown document (modules with a docField, i.e. notes): edited live in
 	// the block editor (formatting as you type, "/" menu), with a raw-markdown
@@ -94,7 +99,7 @@
 	}
 
 	$effect(() => {
-		if (!archive) {
+		if (!folderPath) {
 			media = [];
 			return;
 		}
@@ -175,7 +180,7 @@
 					{#if mod.statusField}
 						<StatusDot {mod} value={item[mod.statusField]} showLabel size={8} />
 					{/if}
-					{#if archive}
+					{#if folderPath}
 						<form method="POST" action="?/open" use:enhance={onOpen}>
 							<Button type="submit" variant="outline" size="sm">
 								<FolderOpen class="size-4" /> Open folder
@@ -185,14 +190,15 @@
 				</div>
 			{/snippet}
 		</PageHeader>
-		{#if archive}
+		{#if folderPath}
 			<div
 				class="-mt-2 flex flex-col gap-1 rounded-[12px] border bg-card px-5 py-4 font-mono text-[11px] text-muted-foreground"
 			>
 				<div class="flex gap-2">
 					<span class="w-14 shrink-0 uppercase tracking-wide text-muted-foreground/60">path</span>
-					<span class="break-all text-foreground/80">{archive.path}</span>
+					<span class="break-all text-foreground/80">{folderPath}</span>
 				</div>
+				{#if archive}
 				<div class="flex gap-2">
 					<span class="w-14 shrink-0 uppercase tracking-wide text-muted-foreground/60">size</span>
 					<span>
@@ -201,7 +207,8 @@
 							: ''}
 					</span>
 				</div>
-				{#if archive.top_extensions}
+				{/if}
+				{#if archive?.top_extensions}
 					<div class="flex gap-2">
 						<span class="w-14 shrink-0 uppercase tracking-wide text-muted-foreground/60">types</span>
 						<span>
@@ -216,7 +223,7 @@
 	</div>
 
 	<div class="mt-8 flex flex-col gap-8">
-	{#if archive}
+	{#if folderPath}
 		<section class="flex flex-col gap-3">
 			<div class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
 				<span>Files</span>

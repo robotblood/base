@@ -60,8 +60,11 @@ export const actions: Actions = {
 		} catch {
 			return fail(404, { message: 'Record not found.' });
 		}
+		// Prefer the first-class path column; fall back to the imported raw copy.
+		const own = (item as { path?: unknown }).path;
 		const raw = item.raw as { path?: unknown } | undefined;
-		const target = typeof raw?.path === 'string' ? raw.path : null;
+		const target =
+			typeof own === 'string' && own ? own : typeof raw?.path === 'string' ? raw.path : null;
 		if (!target) return fail(400, { message: 'No file path recorded for this record.' });
 		let toOpen: string;
 		try {

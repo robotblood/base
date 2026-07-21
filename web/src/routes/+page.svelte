@@ -162,34 +162,39 @@
 	</div>
 
 	<!-- Upcoming shows — dates you're playing, straight off the Calendar. -->
-	{#if data.shows.length}
-		<div class="mb-6 overflow-hidden rounded-[12px] border bg-card">
-			<div class="flex items-center justify-between border-b px-5 py-3">
-				<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-					Shows
-				</span>
+	<div class="mb-6 overflow-hidden rounded-[12px] border bg-card">
+		<div class="flex items-center justify-between border-b px-5 py-3">
+			<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+				Shows
+			</span>
+			{#if data.shows.length}
 				<span class="font-mono text-[11px] tabular-nums text-muted-foreground">{data.shows.length}</span>
-			</div>
-			<div class="divide-y">
-				{#each data.shows as s (s.id)}
-					<a
-						href={s.projectId ? `/projects?open=${s.projectId}` : `/events/${s.id}`}
-						class="flex items-center justify-between gap-3 px-5 py-2.5 transition-colors hover:bg-accent"
-					>
-						<span class="flex min-w-0 items-center gap-3">
-							<span class="w-[86px] flex-none font-mono text-[11px] text-signal"
-								>{fmt(s.when)}</span
-							>
-							<span class="min-w-0 truncate text-sm font-medium">{s.title}</span>
-						</span>
-						{#if s.location}
-							<span class="shrink-0 font-mono text-[11px] text-muted-foreground">{s.location}</span>
-						{/if}
-					</a>
-				{/each}
-			</div>
+			{/if}
 		</div>
-	{/if}
+		<div class="divide-y">
+			{#each data.shows as s (s.id)}
+				<a
+					href={s.projectId ? `/projects?open=${s.projectId}` : `/events/${s.id}`}
+					class="flex items-center justify-between gap-3 px-5 py-2.5 transition-colors hover:bg-accent"
+				>
+					<span class="flex min-w-0 items-center gap-3">
+						<span class="w-[86px] flex-none font-mono text-[11px] text-signal">{fmt(s.when)}</span>
+						<span class="min-w-0 truncate text-sm font-medium">{s.title}</span>
+					</span>
+					{#if s.location}
+						<span class="shrink-0 font-mono text-[11px] text-muted-foreground">{s.location}</span>
+					{/if}
+				</a>
+			{:else}
+				<p class="px-5 py-3.5 font-mono text-xs text-muted-foreground">
+					No shows booked — add dates from a live show project's SHOWS card{#if data.latestShow}&nbsp;(<a
+							class="underline decoration-dotted underline-offset-2 hover:text-foreground/80"
+							href={`/projects?open=${data.latestShow.id}`}>{data.latestShow.name}</a
+						>){/if}.
+				</p>
+			{/each}
+		</div>
+	</div>
 
 	<!-- Active projects, one click back into any of them. -->
 	{#if d && d.active_projects.length}

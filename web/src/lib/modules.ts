@@ -301,6 +301,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
 			{ name: 'membership_type', label: 'Membership', type: 'text' },
 			{ name: 'about', label: 'About', type: 'textarea' },
+			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'group'],
