@@ -233,22 +233,24 @@
 				<!-- Details -->
 				<div class={cardClass}>
 					<div class="{sectionLabel} mb-3.5">DETAILS</div>
-					<div class="flex gap-3 py-1.5">
-						<span
-							class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
-							>SOURCE</span
-						>
-						<span class="break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
-							>active/{p.year || '2026'}</span
-						>
-					</div>
+					{#if p.source}
+						<div class="flex gap-3 py-1.5">
+							<span
+								class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
+								>SOURCE</span
+							>
+							<span class="break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
+								>{p.source}</span
+							>
+						</div>
+					{/if}
 					<div class="flex gap-3 py-1.5">
 						<span
 							class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
 							>PATH</span
 						>
 						<span class="break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
-							>/Volumes/BASE/active/{p.name}</span
+							>{p.path || '—'}</span
 						>
 					</div>
 					<div class="flex gap-3 py-1.5">
@@ -296,17 +298,28 @@
 				<!-- Files -->
 				<div class={cardClass}>
 					<div class="{sectionLabel} mb-1.5">FILES</div>
-					{#each p.files as f (f.name)}
+					{#each p.files as f (f.rel ?? f.name)}
 						{@const pv = filePreview(f.name)}
 						<div class="flex items-center gap-3 border-t py-2.5 first:border-t-0">
-							<FileThumb preview={pv} size={40} />
+							{#if f.rel && f.kind === 'image'}
+								<img
+									src="/projects/{p.id}/thumb?p={encodeURIComponent(f.rel)}&w=96"
+									alt={f.name}
+									loading="lazy"
+									class="size-10 flex-none rounded-[8px] border object-cover"
+								/>
+							{:else}
+								<FileThumb preview={pv} size={40} />
+							{/if}
 							<div class="min-w-0 flex-1">
-								<div class="text-[13.5px]">{f.name}</div>
+								<div class="truncate text-[13.5px]">{f.name}</div>
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
 							</div>
 						</div>
 					{:else}
-						<div class="pt-1.5 text-[13px] text-muted-foreground">No files.</div>
+						<div class="pt-1.5 text-[13px] text-muted-foreground">
+							{p.path ? 'No previewable files in this folder.' : 'No folder linked.'}
+						</div>
 					{/each}
 				</div>
 

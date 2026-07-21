@@ -191,12 +191,24 @@ export const MODULES: ModuleConfig[] = [
 		titleField: 'name',
 		columns: [
 			{ header: 'Name', field: 'name' },
+			{ header: 'Kind', field: 'kind' },
 			{ header: 'Status', field: 'status', render: 'badge' },
 			{ header: 'Summary', field: 'description' }
 		],
 		fields: [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{ name: 'kind', label: 'Kind', type: 'text' },
 			{ name: 'status', label: 'Status', type: 'text' },
+			{
+				name: 'health',
+				label: 'Health',
+				type: 'select',
+				options: ['on-track', 'at-risk', 'blocked']
+			},
+			{ name: 'start', label: 'Start', type: 'date' },
+			{ name: 'due', label: 'Due', type: 'date' },
+			{ name: 'year', label: 'Year', type: 'text' },
+			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'description', label: 'Description', type: 'textarea' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],

@@ -2,6 +2,7 @@
 	import type { Tracker } from '$lib/projects/tracker.svelte';
 	import {
 		STAGES,
+		TODAY,
 		dueInfo,
 		progress,
 		healthVM,
@@ -29,10 +30,10 @@
 		})
 	);
 
-	// Timeline model — window pinned to the mock (Jul 2026 → Mar 2027).
+	// Timeline model — an 8-month window starting at the current month.
 	const MN = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-	const tlStart = new Date('2026-07-01T00:00:00');
-	const tlEnd = new Date('2027-03-01T00:00:00');
+	const tlStart = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+	const tlEnd = new Date(TODAY.getFullYear(), TODAY.getMonth() + 8, 1);
 	const tlSpan = tlEnd.getTime() - tlStart.getTime();
 	function pos(iso: string) {
 		const d = new Date(iso + 'T00:00:00');

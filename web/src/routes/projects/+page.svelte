@@ -1,14 +1,21 @@
 <script lang="ts">
-	// Redesigned Projects experience (Claude Design handoff, Phase 1 prototype).
-	// A single stateful page, mirroring the mock's list ↔ detail navigation, that
-	// slots into the app's existing shell (sidebar + theme toggle live in the
-	// root layout). This static route overrides the generic /[module] page.
+	// Redesigned Projects experience (Claude Design handoff). A single stateful
+	// page, mirroring the mock's list ↔ detail navigation, that slots into the
+	// app's existing shell (sidebar + theme toggle live in the root layout).
+	// This static route overrides the generic /[module] page; data is real
+	// (FastAPI via the server load), mutations persist through /projects/sync.
+	import type { PageProps } from './$types';
 	import { Tracker } from '$lib/projects/tracker.svelte';
 	import ProjectsListView from '$lib/components/projects/ProjectsListView.svelte';
 	import ProjectDetailView from '$lib/components/projects/ProjectDetailView.svelte';
 	import NewProjectModal from '$lib/components/projects/NewProjectModal.svelte';
 
-	const t = new Tracker();
+	let { data }: PageProps = $props();
+
+	// The tracker intentionally captures the initial load and owns all state
+	// from there (mutations are optimistic; the page is never re-loaded).
+	// svelte-ignore state_referenced_locally
+	const t = new Tracker(data.projects);
 	const current = $derived(t.current);
 </script>
 
