@@ -20,6 +20,8 @@
 	import ProjectRundown from './ProjectRundown.svelte';
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import X from '@lucide/svelte/icons/x';
 
 	let { t, p }: { t: Tracker; p: Project } = $props();
 
@@ -30,6 +32,12 @@
 	const showRundown = $derived(t.wsTab === 'rundown');
 
 	const doneCount = $derived(p.tasks.filter((x) => x.done).length);
+	const children = $derived(t.childrenOf(p.id));
+	const parent = $derived(p.parentId ? t.find(p.parentId) : undefined);
+	// Candidates for "link existing": top-level, not this project, not its parent.
+	const linkable = $derived(
+		t.projects.filter((x) => x.id !== p.id && !x.parentId && x.id !== p.parentId)
+	);
 
 	const nextDue = $derived.by(() => {
 		const up: { date: string; title: string; kind: string }[] = [];
@@ -43,8 +51,35 @@
 		return up.slice(0, 3);
 	});
 
+	// Draft state for the add rows.
+	let taskDraft = $state({ title: '', due: '' });
+	let msDraft = $state({ name: '', date: '' });
+	let childDraft = $state('');
+	let linkSel = $state('');
+
+	function submitTask() {
+		if (!taskDraft.title.trim()) return;
+		void t.addTask(p.id, taskDraft.title, taskDraft.due);
+		taskDraft = { title: '', due: '' };
+	}
+	function submitMilestone() {
+		if (!msDraft.name.trim()) return;
+		t.addMilestone(p.id, msDraft.name, msDraft.date);
+		msDraft = { name: '', date: '' };
+	}
+	function submitChild() {
+		if (!childDraft.trim()) return;
+		void t.createChild(p.id, childDraft, p.kind === 'live show' ? 'video' : 'music');
+		childDraft = '';
+	}
+
 	const cardClass = 'rounded-[12px] border bg-card p-[18px_20px]';
 	const sectionLabel = 'font-mono text-[11px] tracking-[0.12em] text-muted-foreground';
+	const ghost =
+		'rounded-[5px] border border-transparent bg-transparent outline-none hover:border-border focus:border-ring';
+	const ghostBtn =
+		'cursor-pointer font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground hover:text-foreground/70';
+	const rowX = 'hidden flex-none cursor-pointer text-muted-foreground hover:text-destructive';
 	const kindLabel = $derived((p.year ? p.year + ' · ' : '') + p.kind);
 </script>
 
@@ -58,7 +93,7 @@
 
 	<!-- Header -->
 	<div class="flex flex-wrap items-start justify-between gap-5">
-		<div class="min-w-0">
+		<div class="min-w-0 flex-1">
 			<div class="flex flex-wrap items-center gap-3">
 				<span
 					class="rounded-[6px] px-[9px] py-[5px] font-mono text-[10px] uppercase tracking-[0.08em] text-white"
@@ -67,8 +102,23 @@
 				<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground"
 					>{kindLabel}</span
 				>
+				{#if parent}
+					<button
+						onclick={() => t.openProject(parent.id)}
+						class="inline-flex cursor-pointer items-center gap-1 rounded-[6px] border px-2 py-[4px] font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+						title="Open the parent project"
+					>
+						Part of {parent.name}
+						<ArrowUpRight class="size-3" />
+					</button>
+				{/if}
 			</div>
-			<h1 class="mt-3 text-[31px] font-extrabold tracking-[-0.02em]">{p.name}</h1>
+			<input
+				value={p.name}
+				onchange={(e) => t.rename(p.id, e.currentTarget.value)}
+				aria-label="Project name"
+				class="{ghost} -mx-1 mt-2 w-full px-1 text-[31px] font-extrabold tracking-[-0.02em]"
+			/>
 		</div>
 		<button
 			onclick={() => (t.layout = t.layout === 'console' ? 'focus' : 'console')}
@@ -148,19 +198,39 @@
 			<div class="flex min-w-0 flex-col gap-5">
 				<!-- Phases -->
 				<div class={cardClass}>
-					<div class="{sectionLabel} mb-4">PHASES</div>
-					<div class="flex gap-[9px]">
-						{#each p.phases as ph (ph.name)}
-							<div class="flex-1">
-								<div class="h-1.5 overflow-hidden rounded bg-muted">
-									<div class="h-full" style="width:{phaseFill(ph.status)}%;background:{phaseColor(ph.status)};"></div>
-								</div>
-								<div
-									class="mt-[9px] font-mono text-[10px] uppercase leading-[1.3] tracking-[0.04em] text-foreground/70"
+					<div class="{sectionLabel} mb-4 flex items-center justify-between">
+						<span>PHASES</span>
+						<button onclick={() => t.addPhase(p.id)} class={ghostBtn}>+ Add</button>
+					</div>
+					<div class="flex flex-wrap gap-[9px]">
+						{#each p.phases as ph, i (i)}
+							<div class="group/ph min-w-[90px] flex-1">
+								<button
+									onclick={() => t.cyclePhase(p.id, i)}
+									title="Click to advance: to-do → active → done"
+									class="block h-1.5 w-full cursor-pointer overflow-hidden rounded bg-muted"
 								>
-									{ph.name}
+									<span
+										class="block h-full"
+										style="width:{phaseFill(ph.status)}%;background:{phaseColor(ph.status)};"
+									></span>
+								</button>
+								<div class="mt-[6px] flex items-center gap-1">
+									<input
+										value={ph.name}
+										onchange={(e) => t.renamePhase(p.id, i, e.currentTarget.value)}
+										aria-label="Phase name"
+										class="{ghost} w-full min-w-0 px-1 py-0.5 font-mono text-[10px] uppercase leading-[1.3] tracking-[0.04em] text-foreground/70"
+									/>
+									<button
+										onclick={() => t.removePhase(p.id, i)}
+										title="Remove phase"
+										class="{rowX} group-hover/ph:block"><X class="size-3" /></button
+									>
 								</div>
 							</div>
+						{:else}
+							<div class="text-[13px] text-muted-foreground">No phases — add the shape of the work.</div>
 						{/each}
 					</div>
 				</div>
@@ -191,7 +261,7 @@
 					</div>
 					{#each p.tasks as task (task.id)}
 						{@const td = dueInfo(task.due, task.done ? 'Complete' : p.status)}
-						<div class="flex items-center gap-3 border-t py-2.5 first:border-t-0">
+						<div class="group/tk flex items-center gap-3 border-t py-2 first:border-t-0">
 							<button
 								onclick={() => t.toggleTask(p.id, task.id)}
 								class="grid size-[19px] flex-none place-items-center rounded-[5px] border-[1.5px]"
@@ -201,29 +271,172 @@
 							>
 								{#if task.done}<span class="text-[12px] leading-none text-white">✓</span>{/if}
 							</button>
-							<span
-								class="flex-1 text-[14px] {task.done
+							<input
+								value={task.title}
+								onchange={(e) => t.updateTask(p.id, task.id, { title: e.currentTarget.value })}
+								aria-label="Task title"
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[14px] {task.done
 									? 'text-muted-foreground line-through'
-									: ''}">{task.title}</span
+									: ''}"
+							/>
+							{#if task.due}
+								<span class="flex-none font-mono text-[11px]" style="color:{td.color};">{td.label}</span>
+							{/if}
+							<input
+								type="date"
+								value={task.due}
+								onchange={(e) => t.updateTask(p.id, task.id, { due: e.currentTarget.value })}
+								aria-label="Task due date"
+								class="{ghost} hidden w-[130px] flex-none px-1 py-0.5 font-mono text-[11px] text-muted-foreground group-hover/tk:block"
+							/>
+							<button
+								onclick={() => t.removeTask(p.id, task.id)}
+								title="Delete task"
+								class="{rowX} group-hover/tk:block"><X class="size-3.5" /></button
 							>
-							<span class="font-mono text-[11px]" style="color:{td.color};">{task.due ? td.label : ''}</span>
 						</div>
 					{/each}
+					<div class="mt-2 flex items-center gap-2 border-t pt-3">
+						<input
+							bind:value={taskDraft.title}
+							onkeydown={(e) => e.key === 'Enter' && submitTask()}
+							placeholder="Add a task…"
+							class="min-w-0 flex-1 rounded-[7px] border bg-card px-2.5 py-[7px] text-[13px] outline-none focus:border-ring"
+						/>
+						<input
+							type="date"
+							bind:value={taskDraft.due}
+							aria-label="Due date"
+							class="w-[140px] flex-none rounded-[7px] border bg-card px-2 py-[7px] font-mono text-[11px] text-muted-foreground outline-none focus:border-ring"
+						/>
+						<button
+							onclick={submitTask}
+							disabled={!taskDraft.title.trim()}
+							class="cursor-pointer rounded-[7px] bg-primary px-3.5 py-[7px] text-[12px] font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+							>Add</button
+						>
+					</div>
+				</div>
+
+				<!-- Tracks / sub-projects -->
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-1.5">
+						{p.kind.includes('music') || p.kind.includes('album') ? 'TRACKS' : 'SUB-PROJECTS'}
+						{#if children.length}<span class="text-muted-foreground/70">· {children.length}</span>{/if}
+					</div>
+					{#each children as c (c.id)}
+						{@const cst = stageOf(c.status)}
+						{@const cpct = progress(c)}
+						<div class="group/ch flex items-center gap-3 border-t py-2.5 first:border-t-0">
+							<span class="size-[9px] flex-none rounded-full" style="background:{cst.color};"></span>
+							<button
+								onclick={() => t.openProject(c.id)}
+								class="min-w-0 flex-1 cursor-pointer truncate text-left text-[14px] hover:underline"
+								>{c.name}</button
+							>
+							<span class="flex w-[110px] flex-none items-center gap-2">
+								<span class="h-1 flex-1 overflow-hidden rounded bg-muted"
+									><span class="block h-full" style="width:{cpct}%;background:{cst.color};"></span></span
+								>
+								<span class="w-[30px] font-mono text-[10px] text-muted-foreground">{cpct}%</span>
+							</span>
+							<button
+								onclick={() => t.linkParent(c.id, undefined)}
+								title="Unlink from this project (keeps the project)"
+								class="{rowX} group-hover/ch:block"><X class="size-3.5" /></button
+							>
+						</div>
+					{:else}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">
+							Nothing linked — songs, cuts, or sub-projects live on their own and roll up here.
+						</div>
+					{/each}
+					<div class="mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
+						<input
+							bind:value={childDraft}
+							onkeydown={(e) => e.key === 'Enter' && submitChild()}
+							placeholder="New linked project…"
+							class="min-w-[140px] flex-1 rounded-[7px] border bg-card px-2.5 py-[7px] text-[13px] outline-none focus:border-ring"
+						/>
+						<button
+							onclick={submitChild}
+							disabled={!childDraft.trim()}
+							class="cursor-pointer rounded-[7px] bg-primary px-3.5 py-[7px] text-[12px] font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+							>Create</button
+						>
+						<select
+							bind:value={linkSel}
+							onchange={() => {
+								if (linkSel) t.linkParent(linkSel, p.id);
+								linkSel = '';
+							}}
+							aria-label="Link an existing project"
+							class="max-w-[180px] flex-none rounded-[7px] border bg-card px-2 py-[7px] text-[12px] text-muted-foreground outline-none focus:border-ring"
+						>
+							<option value="">Link existing…</option>
+							{#each linkable as lp (lp.id)}
+								<option value={lp.id}>{lp.name}</option>
+							{/each}
+						</select>
+					</div>
 				</div>
 
 				<!-- Milestones -->
 				<div class={cardClass}>
 					<div class="{sectionLabel} mb-1.5">MILESTONES</div>
-					{#each p.milestones as m (m.name)}
-						<div class="flex items-center gap-3 border-t py-2.5 first:border-t-0">
-							<span
-								class="size-[11px] flex-none rounded-full"
+					{#each p.milestones as m, i (i)}
+						<div class="group/ms flex items-center gap-3 border-t py-2 first:border-t-0">
+							<button
+								onclick={() => t.toggleMilestone(p.id, i)}
+								title={m.done ? 'Mark not reached' : 'Mark reached'}
+								class="size-[11px] flex-none cursor-pointer rounded-full"
 								style="background:{m.done ? '#2f7d5b' : '#cfc9bb'};"
-							></span>
-							<span class="flex-1 text-[14px] {m.done ? 'text-foreground/70' : ''}">{m.name}</span>
-							<span class="font-mono text-[11px] text-muted-foreground">{fmtISO(m.date)}</span>
+							></button>
+							<input
+								value={m.name}
+								onchange={(e) => t.updateMilestone(p.id, i, { name: e.currentTarget.value })}
+								aria-label="Milestone name"
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[14px] {m.done ? 'text-foreground/70' : ''}"
+							/>
+							<span class="flex-none font-mono text-[11px] text-muted-foreground group-hover/ms:hidden"
+								>{m.date ? fmtISO(m.date) : '—'}</span
+							>
+							<input
+								type="date"
+								value={m.date}
+								onchange={(e) => t.updateMilestone(p.id, i, { date: e.currentTarget.value })}
+								aria-label="Milestone date"
+								class="{ghost} hidden w-[130px] flex-none px-1 py-0.5 font-mono text-[11px] text-muted-foreground group-hover/ms:block"
+							/>
+							<button
+								onclick={() => t.removeMilestone(p.id, i)}
+								title="Delete milestone"
+								class="{rowX} group-hover/ms:block"><X class="size-3.5" /></button
+							>
 						</div>
+					{:else}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">No milestones yet.</div>
 					{/each}
+					<div class="mt-2 flex items-center gap-2 border-t pt-3">
+						<input
+							bind:value={msDraft.name}
+							onkeydown={(e) => e.key === 'Enter' && submitMilestone()}
+							placeholder="Add a milestone…"
+							class="min-w-0 flex-1 rounded-[7px] border bg-card px-2.5 py-[7px] text-[13px] outline-none focus:border-ring"
+						/>
+						<input
+							type="date"
+							bind:value={msDraft.date}
+							aria-label="Milestone date"
+							class="w-[140px] flex-none rounded-[7px] border bg-card px-2 py-[7px] font-mono text-[11px] text-muted-foreground outline-none focus:border-ring"
+						/>
+						<button
+							onclick={submitMilestone}
+							disabled={!msDraft.name.trim()}
+							class="cursor-pointer rounded-[7px] bg-primary px-3.5 py-[7px] text-[12px] font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+							>Add</button
+						>
+					</div>
 				</div>
 			</div>
 
@@ -270,40 +483,83 @@
 					</div>
 					<div class="flex gap-3 py-1.5">
 						<span
-							class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
+							class="w-[58px] flex-none pt-1 font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
 							>SUMMARY</span
 						>
-						<span class="text-[13px] leading-[1.5] text-foreground/70">{p.summary || '—'}</span>
+						<textarea
+							value={p.summary}
+							rows="2"
+							placeholder="What is this project?"
+							onchange={(e) => t.setSummary(p.id, e.currentTarget.value)}
+							class="{ghost} min-w-0 flex-1 resize-y px-1 py-0.5 text-[13px] leading-[1.5] text-foreground/70"
+						></textarea>
 					</div>
 				</div>
 
 				<!-- People -->
 				<div class={cardClass}>
-					<div class="{sectionLabel} mb-1.5">PEOPLE</div>
-					{#each p.people as pe (pe.name + pe.role)}
-						<div class="flex items-center gap-3 border-t py-2 first:border-t-0">
+					<div class="{sectionLabel} mb-1.5 flex items-center justify-between">
+						<span>PEOPLE</span>
+						<button onclick={() => t.addPerson(p.id)} class={ghostBtn}>+ Add</button>
+					</div>
+					{#each p.people as pe, i (i)}
+						<div class="group/pe flex items-center gap-3 border-t py-2 first:border-t-0">
 							<span
-								class="grid size-7 place-items-center rounded-full bg-secondary font-mono text-[10px] text-foreground/70"
-								>{initials(pe.name)}</span
+								class="grid size-7 flex-none place-items-center rounded-full bg-secondary font-mono text-[10px] text-foreground/70"
+								>{initials(pe.name || '?')}</span
 							>
-							<span class="flex-1 text-[13.5px]">{pe.name}</span>
-							<span class="font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground"
-								>{pe.role}</span
+							<input
+								value={pe.name}
+								onchange={(e) => t.updatePerson(p.id, i, { name: e.currentTarget.value })}
+								aria-label="Person name"
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px]"
+							/>
+							<input
+								value={pe.role}
+								onchange={(e) => t.updatePerson(p.id, i, { role: e.currentTarget.value })}
+								aria-label="Role"
+								class="{ghost} w-[90px] flex-none px-1 py-0.5 text-right font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground"
+							/>
+							<button
+								onclick={() => t.removePerson(p.id, i)}
+								title="Remove person"
+								class="{rowX} group-hover/pe:block"><X class="size-3.5" /></button
 							>
 						</div>
+					{:else}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">No people yet.</div>
 					{/each}
 				</div>
 
 				<!-- Notes & meetings -->
 				<div class={cardClass}>
-					<div class="{sectionLabel} mb-1.5">NOTES &amp; MEETINGS</div>
-					{#each p.notes as n (n.title + n.date)}
-						<div class="border-t py-[11px] first:border-t-0">
-							<div class="flex justify-between gap-2">
-								<span class="text-[13.5px] font-semibold">{n.title}</span>
-								<span class="font-mono text-[10px] text-muted-foreground">{fmtISO(n.date)}</span>
+					<div class="{sectionLabel} mb-1.5 flex items-center justify-between">
+						<span>NOTES &amp; MEETINGS</span>
+						<button onclick={() => t.addNote(p.id)} class={ghostBtn}>+ Add</button>
+					</div>
+					{#each p.notes as n, i (i)}
+						<div class="group/nt border-t py-[11px] first:border-t-0">
+							<div class="flex items-center justify-between gap-2">
+								<input
+									value={n.title}
+									onchange={(e) => t.updateNote(p.id, i, { title: e.currentTarget.value })}
+									aria-label="Note title"
+									class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px] font-semibold"
+								/>
+								<span class="flex-none font-mono text-[10px] text-muted-foreground">{fmtISO(n.date)}</span>
+								<button
+									onclick={() => t.removeNote(p.id, i)}
+									title="Delete note"
+									class="{rowX} group-hover/nt:block"><X class="size-3.5" /></button
+								>
 							</div>
-							<div class="mt-1.5 text-[13px] leading-[1.5] text-foreground/70">{n.body}</div>
+							<textarea
+								value={n.body}
+								rows="2"
+								placeholder="Write it down…"
+								onchange={(e) => t.updateNote(p.id, i, { body: e.currentTarget.value })}
+								class="{ghost} mt-1 w-full resize-y px-1 py-0.5 text-[13px] leading-[1.5] text-foreground/70"
+							></textarea>
 						</div>
 					{:else}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">No notes yet.</div>
@@ -329,13 +585,13 @@
 							{@const pv = filePreview(f.name)}
 							<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
 								<MediaThumb pid={p.id} file={f} size={40} ver={t.fileVer[p.id] ?? 0} />
-							<div class="min-w-0 flex-1">
-								<div class="truncate text-[13.5px]">{f.name}</div>
-								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
-							</div>
-							{#if f.rel}
-								<FileRowActions {t} pid={p.id} file={f} />
-							{/if}
+								<div class="min-w-0 flex-1">
+									<div class="truncate text-[13.5px]">{f.name}</div>
+									<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
+								</div>
+								{#if f.rel}
+									<FileRowActions {t} pid={p.id} file={f} />
+								{/if}
 							</div>
 						{/if}
 					{:else}

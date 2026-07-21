@@ -8,6 +8,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { op, id, patch, data } = await request.json();
 	if (op === 'update') return json(await api.update('projects', id, patch));
 	if (op === 'task') return json(await api.update('todos', id, patch));
+	if (op === 'task-create') return json(await api.create('todos', data));
+	if (op === 'task-delete') {
+		await api.remove('todos', id);
+		return json({ ok: true });
+	}
 	if (op === 'create') return json(await api.create('projects', data));
 	throw error(400, `unknown op: ${op}`);
 };

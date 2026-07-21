@@ -98,6 +98,7 @@ export interface Project {
 	summary: string;
 	source?: string; // where the record came from (import source)
 	path?: string; // on-disk folder root — enables real file previews
+	parentId?: string; // umbrella project (e.g. a song's album)
 	phases: Phase[];
 	tasks: Task[];
 	milestones: Milestone[];

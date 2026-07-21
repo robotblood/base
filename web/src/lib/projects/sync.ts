@@ -22,5 +22,7 @@ async function send(body: unknown): Promise<Row | null> {
 export const persist = {
 	update: (id: string, patch: Row) => send({ op: 'update', id, patch }),
 	create: (data: Row) => send({ op: 'create', data }),
-	task: (id: string, patch: Row) => send({ op: 'task', id, patch })
+	task: (id: string, patch: Row) => send({ op: 'task', id, patch }),
+	taskCreate: (data: Row) => send({ op: 'task-create', data }),
+	taskDelete: (id: string) => send({ op: 'task-delete', id })
 };

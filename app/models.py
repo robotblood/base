@@ -95,6 +95,9 @@ class Project(Base, table=True):
     start: Optional[date] = None
     due: Optional[date] = Field(default=None, index=True)
     path: Optional[str] = None  # on-disk folder root, drives media previews
+    # Umbrella linking: a song project points at its album (loose reference,
+    # same convention as todos.project_id). One level is enough.
+    parent_id: Optional[int] = Field(default=None, index=True)
     phases: list = Field(default_factory=list, sa_type=JSONB)  # [{name, status}]
     milestones: list = Field(default_factory=list, sa_type=JSONB)  # [{name, date, done}]
     journal: list = Field(default_factory=list, sa_type=JSONB)  # [{date, title, body}]

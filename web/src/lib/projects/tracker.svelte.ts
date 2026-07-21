@@ -3,7 +3,7 @@
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
 import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile, type Song } from './data';
-import { mapProject } from './map';
+import { mapProject, toTask } from './map';
 import { persist } from './sync';
 
 export type ListView = 'board' | 'list' | 'timeline';
@@ -177,6 +177,178 @@ export class Tracker {
 		t.done = !t.done;
 		void persist.task(tid, { status: t.done ? 'Done' : 'Not started' });
 	}
+	async addTask(pid: string, title: string, due = '') {
+		const p = this.find(pid);
+		if (!p || !title.trim()) return;
+		const row = await persist.taskCreate({
+			title: title.trim(),
+			status: 'Not started',
+			due: due || null,
+			project_id: Number(pid)
+		});
+		if (row) p.tasks.push(toTask(row));
+	}
+	updateTask(pid: string, tid: string, patch: { title?: string; due?: string }) {
+		const t = this.find(pid)?.tasks.find((x) => x.id === tid);
+		if (!t) return;
+		Object.assign(t, patch);
+		void persist.task(tid, { ...patch, due: patch.due || null });
+	}
+	removeTask(pid: string, tid: string) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.tasks = p.tasks.filter((x) => x.id !== tid);
+		void persist.taskDelete(tid);
+	}
+
+	// Phases / milestones / notes / people all live in the project's JSONB —
+	// mutate in place, then persist the whole field.
+	private saveField(pid: string, field: 'phases' | 'milestones' | 'people') {
+		const p = this.find(pid);
+		if (p) void persist.update(pid, { [field]: $state.snapshot(p[field]) });
+	}
+	addPhase(pid: string) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.phases.push({ name: 'New phase', status: 'todo' });
+		this.saveField(pid, 'phases');
+	}
+	renamePhase(pid: string, i: number, name: string) {
+		const ph = this.find(pid)?.phases[i];
+		if (!ph || !name.trim() || ph.name === name.trim()) return;
+		ph.name = name.trim();
+		this.saveField(pid, 'phases');
+	}
+	cyclePhase(pid: string, i: number) {
+		const ph = this.find(pid)?.phases[i];
+		if (!ph) return;
+		ph.status = ph.status === 'todo' ? 'active' : ph.status === 'active' ? 'done' : 'todo';
+		this.saveField(pid, 'phases');
+	}
+	removePhase(pid: string, i: number) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.phases.splice(i, 1);
+		this.saveField(pid, 'phases');
+	}
+	addMilestone(pid: string, name: string, date: string) {
+		const p = this.find(pid);
+		if (!p || !name.trim()) return;
+		p.milestones.push({ name: name.trim(), date, done: false });
+		p.milestones.sort((a, b) => (a.date < b.date ? -1 : 1));
+		this.saveField(pid, 'milestones');
+	}
+	updateMilestone(pid: string, i: number, patch: { name?: string; date?: string }) {
+		const m = this.find(pid)?.milestones[i];
+		if (!m) return;
+		Object.assign(m, patch);
+		this.saveField(pid, 'milestones');
+	}
+	toggleMilestone(pid: string, i: number) {
+		const p = this.find(pid);
+		const m = p?.milestones[i];
+		if (!p || !m) return;
+		m.done = !m.done;
+		if (m.done) this.logActivity(p, `Milestone "${m.name}" reached`);
+		void persist.update(pid, {
+			milestones: $state.snapshot(p.milestones),
+			activity: $state.snapshot(p.activity)
+		});
+	}
+	removeMilestone(pid: string, i: number) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.milestones.splice(i, 1);
+		this.saveField(pid, 'milestones');
+	}
+	addNote(pid: string) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.notes.unshift({ date: isoToday(), title: 'New note', body: '' });
+		this.saveNotes(pid);
+	}
+	updateNote(pid: string, i: number, patch: { title?: string; body?: string; date?: string }) {
+		const n = this.find(pid)?.notes[i];
+		if (!n) return;
+		Object.assign(n, patch);
+		this.saveNotes(pid);
+	}
+	removeNote(pid: string, i: number) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.notes.splice(i, 1);
+		this.saveNotes(pid);
+	}
+	private saveNotes(pid: string) {
+		const p = this.find(pid);
+		if (p) void persist.update(pid, { journal: $state.snapshot(p.notes) });
+	}
+	addPerson(pid: string) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.people.push({ name: 'New person', role: 'role' });
+		this.saveField(pid, 'people');
+	}
+	updatePerson(pid: string, i: number, patch: { name?: string; role?: string }) {
+		const pe = this.find(pid)?.people[i];
+		if (!pe) return;
+		Object.assign(pe, patch);
+		this.saveField(pid, 'people');
+	}
+	removePerson(pid: string, i: number) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.people.splice(i, 1);
+		this.saveField(pid, 'people');
+	}
+	rename(pid: string, name: string) {
+		const p = this.find(pid);
+		if (!p || !name.trim() || p.name === name.trim()) return;
+		p.name = name.trim();
+		void persist.update(pid, { name: p.name });
+	}
+	setSummary(pid: string, text: string) {
+		const p = this.find(pid);
+		if (!p || p.summary === text) return;
+		p.summary = text;
+		void persist.update(pid, { description: text });
+	}
+
+	// ---- umbrella linking (songs → album, sub-projects → rebuild, …) ---------
+	childrenOf(pid: string): Project[] {
+		return this.projects.filter((x) => x.parentId === pid);
+	}
+	linkParent(childId: string, parentId?: string) {
+		const c = this.find(childId);
+		if (!c || childId === parentId) return;
+		c.parentId = parentId;
+		void persist.update(childId, { parent_id: parentId ? Number(parentId) : null });
+		const parent = parentId ? this.find(parentId) : undefined;
+		if (parent) {
+			const activity = this.logActivity(parent, `Linked "${c.name}"`);
+			void persist.update(parentId!, { activity });
+		}
+	}
+	async createChild(pid: string, name: string, kind = 'music') {
+		const p = this.find(pid);
+		if (!p || !name.trim()) return;
+		const today = isoToday();
+		const row = await persist.create({
+			name: name.trim(),
+			kind,
+			year: today.slice(0, 4),
+			status: 'Not Started',
+			health: 'on-track',
+			start: today,
+			parent_id: Number(pid),
+			activity: [{ date: today, text: 'Project created' }]
+		});
+		if (!row) return;
+		this.projects.unshift(mapProject(row));
+		const activity = this.logActivity(p, `Added "${name.trim()}"`);
+		void persist.update(pid, { activity });
+	}
+
 	setStatus(pid: string, key: string) {
 		const p = this.find(pid);
 		if (!p || p.status === key) return;
