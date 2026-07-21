@@ -3,6 +3,7 @@
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
 import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile, type Song } from './data';
+import { emptyReady, kindInfo, presetPhases } from './kinds';
 import { mapProject, toTask } from './map';
 import { persist } from './sync';
 
@@ -301,6 +302,31 @@ export class Tracker {
 		p.people.splice(i, 1);
 		this.saveField(pid, 'people');
 	}
+	// Links (repo, deployed URL, design file, …) live in details.links.
+	private saveDetails(pid: string) {
+		const p = this.find(pid);
+		if (p) void persist.update(pid, { details: $state.snapshot(p.details ?? {}) });
+	}
+	addLink(pid: string, label: string, url: string) {
+		const p = this.find(pid);
+		if (!p || !url.trim()) return;
+		p.details = p.details ?? {};
+		p.details.links = p.details.links ?? [];
+		p.details.links.push({ label: label.trim() || url.trim(), url: url.trim() });
+		this.saveDetails(pid);
+	}
+	updateLink(pid: string, i: number, patch: { label?: string; url?: string }) {
+		const l = this.find(pid)?.details?.links?.[i];
+		if (!l) return;
+		Object.assign(l, patch);
+		this.saveDetails(pid);
+	}
+	removeLink(pid: string, i: number) {
+		const links = this.find(pid)?.details?.links;
+		if (!links) return;
+		links.splice(i, 1);
+		this.saveDetails(pid);
+	}
 	rename(pid: string, name: string) {
 		const p = this.find(pid);
 		if (!p || !name.trim() || p.name === name.trim()) return;
@@ -329,9 +355,10 @@ export class Tracker {
 			void persist.update(parentId!, { activity });
 		}
 	}
-	async createChild(pid: string, name: string, kind = 'music') {
+	async createChild(pid: string, name: string) {
 		const p = this.find(pid);
 		if (!p || !name.trim()) return;
+		const kind = kindInfo(p.kind).childKind;
 		const today = isoToday();
 		const row = await persist.create({
 			name: name.trim(),
@@ -341,6 +368,7 @@ export class Tracker {
 			health: 'on-track',
 			start: today,
 			parent_id: Number(pid),
+			phases: presetPhases(kind),
 			activity: [{ date: today, text: 'Project created' }]
 		});
 		if (!row) return;
@@ -379,7 +407,8 @@ export class Tracker {
 	createRundown(pid: string) {
 		const p = this.find(pid);
 		if (!p || p.rundown) return;
-		p.rundown = { sections: [{ name: 'ACT I', songs: [] }] };
+		const first = kindInfo(p.kind).family === 'music' ? 'SIDE A' : 'ACT I';
+		p.rundown = { sections: [{ name: first, songs: [] }] };
 		this.wsTab = 'rundown';
 		this.saveRundown(pid);
 	}
@@ -445,7 +474,7 @@ export class Tracker {
 	toggleSong(id: string) {
 		this.openSongs[id] = !this.openSongs[id];
 	}
-	toggleReady(pid: string, sid: string, key: 'files' | 'cues' | 'rehearsed') {
+	toggleReady(pid: string, sid: string, key: string) {
 		const song = this.find(pid)
 			?.rundown?.sections.flatMap((s) => s.songs)
 			.find((s) => s.id === sid);
@@ -468,7 +497,7 @@ export class Tracker {
 			performers: [],
 			files: [],
 			resources: [],
-			ready: { files: false, cues: false, rehearsed: false },
+			ready: emptyReady(p.kind),
 			notes: ''
 		});
 		this.renumber(pid);
@@ -523,11 +552,7 @@ export class Tracker {
 			health: 'on-track',
 			start: today,
 			due: np.due || null,
-			phases: [
-				{ name: 'Scope', status: 'active' },
-				{ name: 'Build', status: 'todo' },
-				{ name: 'Ship', status: 'todo' }
-			],
+			phases: presetPhases(np.kind),
 			activity: [{ date: today, text: 'Project created' }]
 		});
 		if (!row) return; // save failed — toast already shown

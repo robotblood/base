@@ -197,7 +197,27 @@ export const MODULES: ModuleConfig[] = [
 		],
 		fields: [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
-			{ name: 'kind', label: 'Kind', type: 'text' },
+			{
+				name: 'kind',
+				label: 'Kind',
+				type: 'select',
+				// The canonical kinds (see $lib/projects/kinds.ts); legacy values
+				// from the import are normalized at read time.
+				options: [
+					'graphics',
+					'motion graphics',
+					'3d',
+					'print',
+					'video',
+					'music',
+					'album',
+					'app dev',
+					'ui/ux',
+					'tech audit',
+					'rebuild',
+					'live show'
+				]
+			},
 			{ name: 'status', label: 'Status', type: 'text' },
 			{
 				name: 'health',

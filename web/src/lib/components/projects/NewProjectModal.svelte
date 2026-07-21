@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { Tracker } from '$lib/projects/tracker.svelte';
+	import { KINDS, kindInfo } from '$lib/projects/kinds';
 
 	let { t }: { t: Tracker } = $props();
 
-	const kinds = ['video', 'live show', 'music', 'design', 'photo', 'mixed'];
+	const preset = $derived(kindInfo(t.np.kind));
 	const inputClass =
 		'w-full rounded-[9px] border bg-card px-3 py-[11px] text-[14px] text-foreground outline-none focus:border-ring';
 	const fieldLabel = 'mb-2 font-mono text-[10px] tracking-[0.08em] text-muted-foreground';
@@ -46,8 +47,8 @@
 			<div class="flex-1">
 				<div class={fieldLabel}>TYPE</div>
 				<select bind:value={t.np.kind} class={inputClass}>
-					{#each kinds as k (k)}
-						<option value={k}>{k}</option>
+					{#each KINDS as k (k.key)}
+						<option value={k.key}>{k.label}</option>
 					{/each}
 				</select>
 			</div>
@@ -57,9 +58,9 @@
 			</div>
 		</div>
 
-		<div class="mb-[22px] text-[12px] text-muted-foreground">
-			Starts in <span class="font-semibold text-foreground/70">Not Started</span> — move it along the
-			pipeline once you dive in.
+		<div class="mb-[22px] text-[12px] leading-[1.6] text-muted-foreground">
+			Born with its phases in place:
+			<span class="font-mono text-[11px] text-foreground/70">{preset.phases.join(' → ')}</span>
 		</div>
 
 		<div class="flex justify-end gap-2.5">

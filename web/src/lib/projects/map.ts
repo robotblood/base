@@ -46,6 +46,10 @@ export function mapProject(row: Row, todos: Row[] = []): Project {
 		source: str(row.source),
 		path: str(row.path),
 		parentId: row.parent_id != null ? String(row.parent_id) : undefined,
+		details:
+			row.details && typeof row.details === 'object'
+				? (row.details as Project['details'])
+				: undefined,
 		phases: arr(row.phases),
 		tasks: todos.filter((t) => String(t.project_id) === id).map(toTask),
 		milestones: arr(row.milestones),

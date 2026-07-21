@@ -60,11 +60,9 @@ export interface Resource {
 	type: string; // link | doc | contact
 	label: string;
 }
-export interface Ready {
-	files: boolean;
-	cues: boolean;
-	rehearsed: boolean;
-}
+// Keys come from the kind's ready-flags (live: files/cues/rehearsed,
+// music: tracked/mixed/mastered — see kinds.ts).
+export type Ready = Record<string, boolean>;
 export interface Song {
 	id: string;
 	order: number;
@@ -99,6 +97,7 @@ export interface Project {
 	source?: string; // where the record came from (import source)
 	path?: string; // on-disk folder root — enables real file previews
 	parentId?: string; // umbrella project (e.g. a song's album)
+	details?: { links?: { label: string; url: string }[] }; // kind-specific extras
 	phases: Phase[];
 	tasks: Task[];
 	milestones: Milestone[];

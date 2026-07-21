@@ -105,6 +105,7 @@ class Project(Base, table=True):
     linked: list = Field(default_factory=list, sa_type=JSONB)  # [{type, title, status}]
     activity: list = Field(default_factory=list, sa_type=JSONB)  # [{date, text}]
     rundown: Optional[dict] = Field(default=None, sa_type=JSONB)  # {sections: [...]}
+    details: dict = Field(default_factory=dict, sa_type=JSONB)  # kind-specific: links, specs, ...
 
 
 class Media(Base, table=True):

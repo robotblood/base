@@ -13,6 +13,7 @@
 		type Project,
 		type Song
 	} from '$lib/projects/data';
+	import { kindInfo } from '$lib/projects/kinds';
 	import FileThumb from './FileThumb.svelte';
 	import ListMusic from '@lucide/svelte/icons/list-music';
 	import X from '@lucide/svelte/icons/x';
@@ -34,11 +35,9 @@
 	const metaLine = (s: Song) =>
 		[fmtDur(s.dur || 0), s.key, s.bpm ? s.bpm + ' BPM' : ''].filter(Boolean).join('   ·   ');
 
-	const readyDefs = [
-		{ key: 'files', label: 'Files', color: '#3a6ea5' },
-		{ key: 'cues', label: 'Cues', color: '#c68a1a' },
-		{ key: 'rehearsed', label: 'Rehearsed', color: '#2f7d5b' }
-	] as const;
+	const info = $derived(kindInfo(p.kind));
+	const readyDefs = $derived(info.ready);
+	const isMusic = $derived(info.family === 'music');
 
 	// Media in the project folder that can be attached to a song.
 	const attachable = $derived(p.files.filter((f) => f.rel));
@@ -71,17 +70,21 @@
 </script>
 
 {#if !p.rundown}
-	<!-- Empty state — any project can become a show -->
+	<!-- Empty state — any project can become a show (or an album) -->
 	<div class="grid place-items-center rounded-[12px] border bg-card px-6 py-16">
 		<ListMusic class="mb-3 size-8 text-muted-foreground" />
-		<div class="mb-1 text-[15px] font-semibold">No rundown yet</div>
+		<div class="mb-1 text-[15px] font-semibold">
+			{isMusic ? 'No tracklist yet' : 'No rundown yet'}
+		</div>
 		<div class="mb-5 max-w-[380px] text-center text-[13px] text-muted-foreground">
-			Build the show: sections, songs, and the audio, video, and 3D files each song uses.
+			{isMusic
+				? 'Build the record: sides, tracks, and the stems, bounces, and artwork each track uses.'
+				: 'Build the show: sections, songs, and the audio, video, and 3D files each song uses.'}
 		</div>
 		<button
 			onclick={() => t.createRundown(p.id)}
 			class="cursor-pointer rounded-[9px] bg-primary px-[18px] py-2.5 text-[13px] font-semibold text-primary-foreground hover:opacity-90"
-			>Start a rundown</button
+			>{isMusic ? 'Start a tracklist' : 'Start a rundown'}</button
 		>
 	</div>
 {:else}
@@ -89,7 +92,7 @@
 		<!-- Stats -->
 		<div class="flex flex-wrap items-center gap-x-[30px] gap-y-2 px-0.5 pb-1.5 pt-0.5">
 			<div class="flex items-baseline gap-2">
-				<span class="font-mono text-[10px] tracking-[0.1em] text-muted-foreground">SONGS</span>
+				<span class="font-mono text-[10px] tracking-[0.1em] text-muted-foreground">{isMusic ? 'TRACKS' : 'SONGS'}</span>
 				<span class="text-[20px] font-extrabold">{totals.count}</span>
 			</div>
 			<div class="flex items-baseline gap-2">
@@ -113,7 +116,7 @@
 					/>
 					<span class="h-px flex-1 bg-border"></span>
 					<span class="font-mono text-[10px] text-muted-foreground"
-						>{sec.songs.length} songs · {fmtDur(secDur(sec.songs))}</span
+						>{sec.songs.length} {isMusic ? 'tracks' : 'songs'} · {fmtDur(secDur(sec.songs))}</span
 					>
 					{#if !sec.songs.length}
 						<button
@@ -372,7 +375,7 @@
 					<button
 						onclick={() => t.addSong(p.id, si)}
 						class="cursor-pointer rounded-[10px] border border-dashed p-[11px] text-center font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground hover:border-ring/40 hover:text-foreground/70"
-						>+ Add song</button
+						>+ Add {isMusic ? 'track' : 'song'}</button
 					>
 				</div>
 			</div>
