@@ -14,7 +14,7 @@
 		LINK_CODE_MAP,
 		type Project
 	} from '$lib/projects/data';
-	import FileThumb from './FileThumb.svelte';
+	import MediaThumb from './MediaThumb.svelte';
 	import ProjectRundown from './ProjectRundown.svelte';
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -249,9 +249,17 @@
 							class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
 							>PATH</span
 						>
-						<span class="break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
+						<span class="min-w-0 flex-1 break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
 							>{p.path || '—'}</span
 						>
+						{#if p.path}
+							<button
+								onclick={() => t.openLocal(p.id)}
+								title="Open folder in file manager"
+								class="cursor-pointer self-start rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+								>OPEN</button
+							>
+						{/if}
 					</div>
 					<div class="flex gap-3 py-1.5">
 						<span
@@ -300,21 +308,28 @@
 					<div class="{sectionLabel} mb-1.5">FILES</div>
 					{#each p.files as f (f.rel ?? f.name)}
 						{@const pv = filePreview(f.name)}
-						<div class="flex items-center gap-3 border-t py-2.5 first:border-t-0">
-							{#if f.rel && f.kind === 'image'}
-								<img
-									src="/projects/{p.id}/thumb?p={encodeURIComponent(f.rel)}&w=96"
-									alt={f.name}
-									loading="lazy"
-									class="size-10 flex-none rounded-[8px] border object-cover"
-								/>
-							{:else}
-								<FileThumb preview={pv} size={40} />
-							{/if}
+						<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
+							<MediaThumb pid={p.id} file={f} size={40} />
 							<div class="min-w-0 flex-1">
 								<div class="truncate text-[13.5px]">{f.name}</div>
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
 							</div>
+							{#if f.rel}
+								<div class="hidden flex-none gap-1 group-hover:flex">
+									<button
+										onclick={() => t.openLocal(p.id, f.rel)}
+										title="Open in native app"
+										class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+										>OPEN</button
+									>
+									<button
+										onclick={() => t.openLocal(p.id, f.rel, 'reveal')}
+										title="Reveal in file manager"
+										class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+										>REVEAL</button
+									>
+								</div>
+							{/if}
 						</div>
 					{:else}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">

@@ -1,6 +1,7 @@
 // Interactive state for the Projects tracker. Initial data comes from the
 // server load (real FastAPI rows shaped by `map.ts`); mutations apply
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
+import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile } from './data';
 import { mapProject } from './map';
 import { persist } from './sync';
@@ -56,6 +57,21 @@ export class Tracker {
 	};
 
 	// ---- real on-disk files --------------------------------------------------
+	// Open a file (or the project folder, with no rel) in its native app, or
+	// reveal it in the file manager. Runs on the machine hosting the app.
+	async openLocal(pid: string, rel?: string, mode: 'open' | 'reveal' = 'open') {
+		try {
+			const res = await fetch(`/projects/${pid}/open`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ p: rel ?? '', mode })
+			});
+			if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+		} catch (e) {
+			toast.error('Could not open', { description: String(e) });
+		}
+	}
+
 	async loadFiles(id: string) {
 		const p = this.find(id);
 		if (!p || !p.path || this.filesLoaded[id]) return;

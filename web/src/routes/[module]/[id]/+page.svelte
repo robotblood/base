@@ -242,6 +242,7 @@
 								<video
 									controls
 									preload="metadata"
+									poster={`${base}/thumb?p=${enc(m.rel)}&w=800`}
 									class="aspect-video w-full rounded-lg border bg-black"
 									src={`${base}/file?p=${enc(m.rel)}`}
 								></video>
