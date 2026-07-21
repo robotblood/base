@@ -1,10 +1,15 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { cn } from '$lib/utils';
 	import { fmt } from '$lib/format';
 	import type { PageData } from './$types';
 	import type { TodoBrief, EventBrief, NoteBrief } from '$lib/types';
 	import { getModule } from '$lib/modules';
 	import StatusDot from '$lib/components/chrome/StatusDot.svelte';
+	import FolderPlus from '@lucide/svelte/icons/folder-plus';
+	import ListMusic from '@lucide/svelte/icons/list-music';
+	import NotebookPen from '@lucide/svelte/icons/notebook-pen';
+	import Plus from '@lucide/svelte/icons/plus';
 
 	// The dashboard shows todo briefs rather than full records, so it borrows
 	// the todos module config purely for its status colour vocabulary.
@@ -38,6 +43,9 @@
 		if (day < 0) return { label: day === -1 ? 'yesterday' : `${-day}d ago`, overdue: true };
 		return { label: `in ${day}d`, overdue: false };
 	}
+
+	const quickBtn =
+		'inline-flex cursor-pointer items-center gap-2 rounded-[12px] border bg-card px-4 py-3 text-[13px] font-semibold text-foreground/80 transition-colors hover:border-ring/40 hover:bg-accent';
 
 	const readout = $derived([
 		{ label: 'Overdue', value: d?.overdue.length ?? 0, danger: (d?.overdue.length ?? 0) > 0 },
@@ -109,6 +117,66 @@
 			{/if}
 		</h1>
 	</div>
+
+	<!-- Quick start: one click from logged-in to working. -->
+	<div class="mb-6 flex flex-wrap items-stretch gap-2.5">
+		<form method="POST" action="?/weekly" use:enhance>
+			<button type="submit" class={quickBtn} title="Open (or start) this week's note">
+				<NotebookPen class="size-4 text-signal" /> Weekly note
+			</button>
+		</form>
+		{#if data.latestShow}
+			<a
+				href={`/projects?open=${data.latestShow.id}&tab=rundown`}
+				class={quickBtn}
+				title={`Open the rundown for ${data.latestShow.name}`}
+			>
+				<ListMusic class="size-4" style="color:#7d5ba6;" /> New song
+				<span class="max-w-[140px] truncate font-mono text-[10px] font-normal text-muted-foreground"
+					>{data.latestShow.name}</span
+				>
+			</a>
+		{/if}
+		<a href="/projects?new=1" class={quickBtn} title="Start a new project">
+			<FolderPlus class="size-4" style="color:#2f7d5b;" /> New project
+		</a>
+		<form
+			method="POST"
+			action="?/capture"
+			use:enhance
+			class="flex min-w-[240px] flex-1 items-center gap-2 rounded-[12px] border bg-card px-3 py-1.5 focus-within:border-ring"
+		>
+			<Plus class="size-4 flex-none text-muted-foreground" />
+			<input
+				name="title"
+				placeholder="Quick capture — get it out of your head…"
+				autocomplete="off"
+				class="min-w-0 flex-1 bg-transparent py-1.5 text-[13px] outline-none placeholder:text-muted-foreground"
+			/>
+			<button
+				type="submit"
+				class="cursor-pointer rounded-[8px] bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground hover:opacity-90"
+				>Add</button
+			>
+		</form>
+	</div>
+
+	<!-- Active projects, one click back into any of them. -->
+	{#if d && d.active_projects.length}
+		<div class="mb-6 flex flex-wrap items-center gap-2">
+			<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+				Active
+			</span>
+			{#each d.active_projects as p (p.id)}
+				<a
+					href={`/projects?open=${p.id}`}
+					class="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground/80 transition-colors hover:border-ring/40 hover:bg-accent"
+				>
+					<span class="size-1.5 rounded-full" style="background:#2f7d5b;"></span>{p.name}
+				</a>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Readout tiles, as cards rather than a full-bleed divided band. -->
 	<div class="mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4">

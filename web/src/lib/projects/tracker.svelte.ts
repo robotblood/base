@@ -74,6 +74,48 @@ export class Tracker {
 		}
 	}
 
+	// Rename or move a file inside the project folder (server keeps rundown
+	// attachments pointing at it), then refresh the listing and the rundown.
+	private async fileOp(pid: string, body: Record<string, string>) {
+		try {
+			const res = await fetch(`/projects/${pid}/fs`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+			const { rel } = (await res.json()) as { rel: string };
+			// Mirror the server's rundown fix-up locally (it already persisted).
+			const p = this.find(pid);
+			const newName = rel.split('/').pop() ?? rel;
+			for (const sec of p?.rundown?.sections ?? [])
+				for (const song of sec.songs)
+					for (const f of song.files)
+						if (f.rel === body.p) {
+							f.rel = rel;
+							f.name = newName;
+						}
+			void this.loadFiles(pid, true);
+		} catch (e) {
+			toast.error('File operation failed', { description: String(e) });
+		}
+	}
+	renameFile(pid: string, rel: string, newName: string) {
+		return this.fileOp(pid, { p: rel, op: 'rename', to: newName });
+	}
+	moveFile(pid: string, rel: string, toDir: string) {
+		return this.fileOp(pid, { p: rel, op: 'move', to: toDir });
+	}
+	async fileDirs(pid: string): Promise<string[]> {
+		try {
+			const res = await fetch(`/projects/${pid}/fs`);
+			if (!res.ok) return [];
+			return ((await res.json()) as { dirs: string[] }).dirs;
+		} catch {
+			return [];
+		}
+	}
+
 	async loadFiles(id: string, force = false) {
 		const p = this.find(id);
 		if (!p || !p.path || (this.filesLoaded[id] && !force)) return;

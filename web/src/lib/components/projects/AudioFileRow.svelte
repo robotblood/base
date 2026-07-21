@@ -6,6 +6,7 @@
 	import { filePreview, fmtDur, type ProjFile } from '$lib/projects/data';
 	import Pause from '@lucide/svelte/icons/pause';
 	import Play from '@lucide/svelte/icons/play';
+	import FileRowActions from './FileRowActions.svelte';
 
 	let { t, pid, file }: { t: Tracker; pid: string; file: ProjFile } = $props();
 
@@ -96,18 +97,5 @@
 			{/each}
 		</div>
 	</div>
-	<div class="hidden flex-none gap-1 group-hover:flex">
-		<button
-			onclick={() => t.openLocal(pid, file.rel)}
-			title="Open in native app"
-			class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-			>OPEN</button
-		>
-		<button
-			onclick={() => t.openLocal(pid, file.rel, 'reveal')}
-			title="Reveal in file manager"
-			class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-			>REVEAL</button
-		>
-	</div>
+	<FileRowActions {t} {pid} {file} />
 </div>

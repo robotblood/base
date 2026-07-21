@@ -5,6 +5,7 @@
 	// This static route overrides the generic /[module] page; data is real
 	// (FastAPI via the server load), mutations persist through /projects/sync.
 	import { onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import type { PageProps } from './$types';
 	import { Tracker } from '$lib/projects/tracker.svelte';
 	import ProjectsListView from '$lib/components/projects/ProjectsListView.svelte';
@@ -20,6 +21,18 @@
 	const t = new Tracker(data.projects);
 	const current = $derived(t.current);
 	onDestroy(() => t.stopWatch());
+
+	// Deep links (?open, ?tab, ?new) — applied in the browser only, since
+	// opening a project starts fetches and a folder watch.
+	if (browser) {
+		// svelte-ignore state_referenced_locally
+		if (data.open && t.find(data.open)) {
+			t.openProject(data.open);
+			if (data.tab === 'rundown') t.wsTab = 'rundown';
+		} else if (data.startNew) {
+			t.newOpen = true;
+		}
+	}
 </script>
 
 <svelte:head><title>base — Projects</title></svelte:head>

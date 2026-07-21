@@ -15,6 +15,7 @@
 		type Project
 	} from '$lib/projects/data';
 	import AudioFileRow from './AudioFileRow.svelte';
+	import FileRowActions from './FileRowActions.svelte';
 	import MediaThumb from './MediaThumb.svelte';
 	import ProjectRundown from './ProjectRundown.svelte';
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
@@ -333,20 +334,7 @@
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
 							</div>
 							{#if f.rel}
-								<div class="hidden flex-none gap-1 group-hover:flex">
-									<button
-										onclick={() => t.openLocal(p.id, f.rel)}
-										title="Open in native app"
-										class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-										>OPEN</button
-									>
-									<button
-										onclick={() => t.openLocal(p.id, f.rel, 'reveal')}
-										title="Reveal in file manager"
-										class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-										>REVEAL</button
-									>
-								</div>
+								<FileRowActions {t} pid={p.id} file={f} />
 							{/if}
 							</div>
 						{/if}
