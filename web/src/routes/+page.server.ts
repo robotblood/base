@@ -26,18 +26,34 @@ export const load: PageServerLoad = async () => {
 	let dashboard: DashboardData | null = null;
 	let apiError: string | null = null;
 	let latestShow: { id: number; name: string } | null = null;
+	let shows: { id: number; title: string; when: string; location: string; projectId: number | null }[] =
+		[];
 	try {
 		dashboard = await api.dashboard();
+		const [projects, events] = await Promise.all([api.list('projects'), api.list('events')]);
 		// Most recently updated project with a rundown — the "New song" target.
-		const projects = await api.list('projects');
-		const shows = projects
+		const withRundown = projects
 			.filter((p) => p.rundown)
 			.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
-		if (shows.length) latestShow = { id: shows[0].id as number, name: String(shows[0].name) };
+		if (withRundown.length)
+			latestShow = { id: withRundown[0].id as number, name: String(withRundown[0].name) };
+		// Upcoming performances — the shows you're actually playing.
+		const now = new Date().toISOString();
+		shows = events
+			.filter((e) => e.kind === 'performance' && String(e.starts_at ?? '') >= now)
+			.sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+			.slice(0, 8)
+			.map((e) => ({
+				id: e.id as number,
+				title: String(e.title),
+				when: String(e.starts_at),
+				location: String(e.location ?? ''),
+				projectId: (e.project_id as number | null) ?? null
+			}));
 	} catch (e) {
 		apiError = e instanceof Error ? e.message : String(e);
 	}
-	return { dashboard, apiError, latestShow, weekOf: mondayISO() };
+	return { dashboard, apiError, latestShow, shows, weekOf: mondayISO() };
 };
 
 export const actions: Actions = {

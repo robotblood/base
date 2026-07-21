@@ -41,6 +41,8 @@
 
 	// Media in the project folder that can be attached to a song.
 	const attachable = $derived(p.files.filter((f) => f.rel));
+	// Child projects a track can link to (its own song project).
+	const children = $derived(t.childrenOf(p.id));
 	const ROLES = ['playback', 'click', 'track', 'visuals', 'lighting', 'model', 'chart'];
 
 	// Inline "attach file" state — one open picker at a time.
@@ -150,6 +152,17 @@
 										{#if song.artist}<span class="text-[13px] font-normal text-muted-foreground"
 												>{song.artist}</span
 											>{/if}
+										{#if song.projectId && t.find(song.projectId)}
+											<button
+												onclick={(e) => {
+													e.stopPropagation();
+													t.openProject(song.projectId!);
+												}}
+												title="Open this track's project"
+												class="ml-1 inline-flex cursor-pointer items-center gap-0.5 rounded-[5px] border px-1.5 py-[2px] align-middle font-mono text-[9px] uppercase tracking-[0.05em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+												>proj ↗</button
+											>
+										{/if}
 									</div>
 									<div class="mt-1 font-mono text-[11px] text-muted-foreground">{metaLine(song)}</div>
 								</div>
@@ -225,6 +238,44 @@
 											class="mb-1 cursor-pointer p-1 text-muted-foreground hover:text-destructive"
 											><X class="size-4" /></button
 										>
+									</div>
+
+									<!-- Track ↔ its own project -->
+									<div class="flex flex-wrap items-center gap-2 px-[18px] pt-3">
+										<span class="font-mono text-[9px] tracking-[0.1em] text-muted-foreground">PROJECT</span>
+										{#if song.projectId && t.find(song.projectId)}
+											{@const sp = t.find(song.projectId)!}
+											<button
+												onclick={() => t.openProject(sp.id)}
+												class="inline-flex cursor-pointer items-center gap-1.5 rounded-[7px] border bg-card px-2.5 py-1 text-[12px] font-medium hover:border-ring/40"
+											>
+												{sp.name}
+												<span class="font-mono text-[10px] text-muted-foreground">{sp.status}</span>
+											</button>
+											<button
+												onclick={() => t.linkSongProject(p.id, song.id, undefined)}
+												title="Unlink (keeps the project)"
+												class="cursor-pointer text-muted-foreground hover:text-destructive"
+												><X class="size-3.5" /></button
+											>
+										{:else}
+											<select
+												value=""
+												onchange={(e) => {
+													if (e.currentTarget.value) t.linkSongProject(p.id, song.id, e.currentTarget.value);
+												}}
+												aria-label="Link a project to this track"
+												class="max-w-[200px] rounded-[7px] border bg-card px-2 py-1 text-[12px] text-muted-foreground outline-none focus:border-ring"
+											>
+												<option value="">Link project…</option>
+												{#each children as c (c.id)}
+													<option value={c.id}>{c.name}</option>
+												{/each}
+											</select>
+											<button onclick={() => t.createSongProject(p.id, song.id)} class={ghostBtn}
+												>+ Create from title</button
+											>
+										{/if}
 									</div>
 
 									<div class="grid grid-cols-3 gap-[22px] px-[18px] py-4">

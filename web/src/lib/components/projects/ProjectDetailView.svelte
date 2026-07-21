@@ -79,6 +79,8 @@
 	let dlDraft = $state({ name: '', spec: '' });
 	let noteDraft = $state('');
 	let evDraft = $state({ title: '', when: '' });
+	let personSel = $state('');
+	let personDraft = $state('');
 
 	function submitTask() {
 		if (!taskDraft.title.trim()) return;
@@ -114,6 +116,11 @@
 		if (!evDraft.title.trim()) return;
 		void t.addEvent(p.id, evDraft.title, evDraft.when);
 		evDraft = { title: '', when: '' };
+	}
+	function submitPerson() {
+		if (!personDraft.trim()) return;
+		void t.createPerson(p.id, personDraft);
+		personDraft = '';
 	}
 
 	const cardClass = 'rounded-[12px] border bg-card p-[18px_20px]';
@@ -760,37 +767,66 @@
 
 		{#snippet peopleC()}
 			<div class={cardClass}>
-				<div class="{sectionLabel} mb-1.5 flex items-center justify-between">
-					<span>PEOPLE</span>
-					<button onclick={() => t.addPerson(p.id)} class={ghostBtn}>+ Add</button>
-				</div>
+				<div class="{sectionLabel} mb-1.5">PEOPLE</div>
 				{#each p.people as pe, i (i)}
 					<div class="group/pe flex items-center gap-3 border-t py-2 first:border-t-0">
 						<span
 							class="grid size-7 flex-none place-items-center rounded-full bg-secondary font-mono text-[10px] text-foreground/70"
 							>{initials(pe.name || '?')}</span
 						>
-						<input
-							value={pe.name}
-							onchange={(e) => t.updatePerson(p.id, i, { name: e.currentTarget.value })}
-							aria-label="Person name"
-							class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px]"
-						/>
+						{#if pe.personId}
+							<a
+								href="/people/{pe.personId}"
+								class="min-w-0 flex-1 truncate text-[13.5px] hover:underline">{pe.name}</a
+							>
+						{:else}
+							<input
+								value={pe.name}
+								onchange={(e) => t.updatePerson(p.id, i, { name: e.currentTarget.value })}
+								aria-label="Person name"
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px]"
+							/>
+						{/if}
 						<input
 							value={pe.role}
 							onchange={(e) => t.updatePerson(p.id, i, { role: e.currentTarget.value })}
-							aria-label="Role"
+							aria-label="Role on this project"
 							class="{ghost} w-[90px] flex-none px-1 py-0.5 text-right font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground"
 						/>
 						<button
 							onclick={() => t.removePerson(p.id, i)}
-							title="Remove person"
+							title="Remove from this project (keeps the person record)"
 							class="{rowX} group-hover/pe:block"><X class="size-3.5" /></button
 						>
 					</div>
 				{:else}
-					<div class="pt-1.5 text-[13px] text-muted-foreground">No people yet.</div>
+					<div class="pt-1.5 text-[13px] text-muted-foreground">
+						No people yet — linked from the People database.
+					</div>
 				{/each}
+				<div class="mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
+					<select
+						bind:value={personSel}
+						onchange={() => {
+							if (personSel) t.linkPerson(p.id, personSel);
+							personSel = '';
+						}}
+						aria-label="Link a person"
+						class="max-w-[150px] flex-none rounded-[7px] border bg-card px-2 py-[7px] text-[12px] text-muted-foreground outline-none focus:border-ring"
+					>
+						<option value="">Link person…</option>
+						{#each t.directory.filter((d) => !p.people.some((x) => x.personId === d.id)) as d (d.id)}
+							<option value={d.id}>{d.name}</option>
+						{/each}
+					</select>
+					<input
+						bind:value={personDraft}
+						onkeydown={(e) => e.key === 'Enter' && submitPerson()}
+						placeholder="New person…"
+						class="{addInput} min-w-[110px]"
+					/>
+					<button onclick={submitPerson} disabled={!personDraft.trim()} class={addBtn}>Add</button>
+				</div>
 			</div>
 		{/snippet}
 

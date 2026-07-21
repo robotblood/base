@@ -30,8 +30,15 @@ export class Tracker {
 	openSongs = $state<Record<string, boolean>>({});
 	filesLoaded = $state<Record<string, boolean>>({});
 
-	constructor(initial: Project[], opts?: { defaultView?: string; defaultLayout?: string }) {
+	// The People database (id + name), for linking project people to records.
+	directory = $state<{ id: string; name: string }[]>([]);
+
+	constructor(
+		initial: Project[],
+		opts?: { defaultView?: string; defaultLayout?: string; directory?: { id: string; name: string }[] }
+	) {
 		this.projects = initial;
+		if (opts?.directory) this.directory = opts.directory;
 		if (opts?.defaultView && ['board', 'list', 'timeline'].includes(opts.defaultView))
 			this.listView = opts.defaultView as ListView;
 		if (opts?.defaultLayout && ['console', 'focus'].includes(opts.defaultLayout))
@@ -307,15 +314,29 @@ export class Tracker {
 		p.events.splice(i, 1);
 		void persist.eventDelete(ev.id);
 	}
-	addPerson(pid: string) {
+	// Link a People-database record onto the project (role stays per-project).
+	linkPerson(pid: string, personId: string) {
 		const p = this.find(pid);
-		if (!p) return;
-		p.people.push({ name: 'New person', role: 'role' });
+		const person = this.directory.find((d) => d.id === personId);
+		if (!p || !person || p.people.some((x) => x.personId === personId)) return;
+		p.people.push({ personId, name: person.name, role: 'role' });
+		this.saveField(pid, 'people');
+	}
+	// New name → a real People record, then linked here.
+	async createPerson(pid: string, name: string) {
+		const p = this.find(pid);
+		if (!p || !name.trim()) return;
+		const row = await persist.personCreate({ name: name.trim() });
+		if (!row) return;
+		const person = { id: String(row.id), name: String(row.name ?? name.trim()) };
+		this.directory.push(person);
+		p.people.push({ personId: person.id, name: person.name, role: 'role' });
 		this.saveField(pid, 'people');
 	}
 	updatePerson(pid: string, i: number, patch: { name?: string; role?: string }) {
 		const pe = this.find(pid)?.people[i];
 		if (!pe) return;
+		if (pe.personId) delete patch.name; // linked names live in the People record
 		Object.assign(pe, patch);
 		this.saveField(pid, 'people');
 	}
@@ -422,7 +443,7 @@ export class Tracker {
 			void persist.update(parentId!, { activity });
 		}
 	}
-	async createChild(pid: string, name: string) {
+	async createChild(pid: string, name: string): Promise<Project | undefined> {
 		const p = this.find(pid);
 		if (!p || !name.trim()) return;
 		const kind = kindInfo(p.kind).childKind;
@@ -439,9 +460,11 @@ export class Tracker {
 			activity: [{ date: today, text: 'Project created' }]
 		});
 		if (!row) return;
-		this.projects.unshift(mapProject(row));
+		const child = mapProject(row);
+		this.projects.unshift(child);
 		const activity = this.logActivity(p, `Added "${name.trim()}"`);
 		void persist.update(pid, { activity });
+		return child;
 	}
 
 	setStatus(pid: string, key: string) {
@@ -524,6 +547,22 @@ export class Tracker {
 		const song = this.findSong(pid, sid);
 		if (!song) return;
 		song.files.splice(index, 1);
+		this.saveRundown(pid);
+	}
+	// A track can point at its own project (usually a child of this one) —
+	// link an existing project, spin one up from the song title, or unlink.
+	linkSongProject(pid: string, sid: string, projectId?: string) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		song.projectId = projectId;
+		this.saveRundown(pid);
+	}
+	async createSongProject(pid: string, sid: string) {
+		const song = this.findSong(pid, sid);
+		if (!song) return;
+		const child = await this.createChild(pid, song.title);
+		if (!child) return;
+		song.projectId = child.id;
 		this.saveRundown(pid);
 	}
 	updatePerformer(pid: string, sid: string, index: number, patch: { name?: string; part?: string }) {

@@ -28,5 +28,6 @@ export const persist = {
 	noteCreate: (data: Row) => send({ op: 'note-create', data }),
 	noteDelete: (id: string) => send({ op: 'note-delete', id }),
 	eventCreate: (data: Row) => send({ op: 'event-create', data }),
-	eventDelete: (id: string) => send({ op: 'event-delete', id })
+	eventDelete: (id: string) => send({ op: 'event-delete', id }),
+	personCreate: (data: Row) => send({ op: 'person-create', data })
 };

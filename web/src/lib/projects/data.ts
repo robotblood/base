@@ -51,8 +51,9 @@ export interface Linked {
 	status: string;
 }
 export interface PersonRef {
+	personId?: string; // People database record; name mirrors it when linked
 	name: string;
-	role: string;
+	role: string; // per-project role, lives with the project
 }
 export interface ActivityEntry {
 	date: string;
@@ -79,6 +80,7 @@ export interface Song {
 	order: number;
 	title: string;
 	artist: string;
+	projectId?: string; // this track's own project (usually a child of this one)
 	dur: number; // seconds
 	key: string;
 	bpm: number;
