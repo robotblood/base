@@ -9,6 +9,7 @@
 	import ProjectsListView from '$lib/components/projects/ProjectsListView.svelte';
 	import ProjectDetailView from '$lib/components/projects/ProjectDetailView.svelte';
 	import NewProjectModal from '$lib/components/projects/NewProjectModal.svelte';
+	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -29,4 +30,10 @@
 
 {#if t.newOpen}
 	<NewProjectModal {t} />
+{/if}
+
+{#if t.picker}
+	{#key t.picker.pid}
+		<FolderPicker {t} />
+	{/key}
 {/if}

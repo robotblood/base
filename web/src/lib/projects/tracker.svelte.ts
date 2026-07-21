@@ -158,6 +158,26 @@ export class Tracker {
 		this.saveRundown(pid);
 	}
 
+	// ---- folder picker -------------------------------------------------------
+	picker = $state<{ pid: string } | null>(null);
+	openPicker(pid: string) {
+		this.picker = { pid };
+	}
+	closePicker = () => {
+		this.picker = null;
+	};
+	async setPath(pid: string, path: string) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.path = path;
+		p.files = [];
+		this.filesLoaded[pid] = false;
+		this.picker = null;
+		const activity = this.logActivity(p, `Linked folder ${path}`);
+		await persist.update(pid, { path, activity });
+		void this.loadFiles(pid);
+	}
+
 	// ---- new project modal ---------------------------------------------------
 	openNew = () => {
 		this.newOpen = true;

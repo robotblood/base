@@ -252,14 +252,22 @@
 						<span class="min-w-0 flex-1 break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
 							>{p.path || '—'}</span
 						>
-						{#if p.path}
+						<div class="flex flex-none gap-1 self-start">
+							{#if p.path}
+								<button
+									onclick={() => t.openLocal(p.id)}
+									title="Open folder in file manager"
+									class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+									>OPEN</button
+								>
+							{/if}
 							<button
-								onclick={() => t.openLocal(p.id)}
-								title="Open folder in file manager"
-								class="cursor-pointer self-start rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-								>OPEN</button
+								onclick={() => t.openPicker(p.id)}
+								title="Link this project to a folder"
+								class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+								>{p.path ? 'CHANGE' : 'SET'}</button
 							>
-						{/if}
+						</div>
 					</div>
 					<div class="flex gap-3 py-1.5">
 						<span
@@ -333,7 +341,15 @@
 						</div>
 					{:else}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
-							{p.path ? 'No previewable files in this folder.' : 'No folder linked.'}
+							{#if p.path}
+								No previewable files in this folder.
+							{:else}
+								<button
+									onclick={() => t.openPicker(p.id)}
+									class="cursor-pointer underline decoration-dotted underline-offset-4 hover:text-foreground/80"
+									>Link a folder</button
+								> to preview its files here.
+							{/if}
 						</div>
 					{/each}
 				</div>
