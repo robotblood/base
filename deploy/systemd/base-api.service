@@ -1,0 +1,14 @@
+[Unit]
+Description=base — FastAPI backend
+# Postgres runs in Docker (restart: unless-stopped); until it's up, uvicorn
+# exits on init_db and systemd retries below.
+
+[Service]
+ExecStart=%h/base/scripts/api-serve.sh
+WorkingDirectory=%h/base
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target

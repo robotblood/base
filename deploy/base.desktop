@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=base
+GenericName=Personal System
+Comment=Projects, todos, notes, media — your system
+Exec=brave-browser --app=http://localhost:3000 --class=base
+Icon=base
+Terminal=false
+Categories=Office;ProjectManagement;
+StartupWMClass=base

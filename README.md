@@ -43,12 +43,36 @@ base/
    bash ~/base/scripts/import.sh --wipe
    ```
 
-## Daily use
+## Daily use (always-on)
+
+One-time install (and re-run after changing `deploy/` or rebuilding the web app):
 
 ```bash
-bash ~/base/scripts/dev.sh     # terminal 1: API at http://127.0.0.1:8000 (docs at /docs)
-bash ~/base/scripts/web.sh     # terminal 2: web dashboard at http://localhost:5173
+cd ~/base/web && npm run build   # production bundle (adapter-node)
+bash ~/base/scripts/install-services.sh
 ```
+
+That enables two systemd user services that start at login and restart on
+failure — `base-api` (http://127.0.0.1:8000) and `base-web`
+(http://localhost:3000) — and installs a **base** desktop entry that opens
+the dashboard as its own app window. Postgres comes up with Docker
+(`restart: unless-stopped`).
+
+```bash
+journalctl --user -u base-web -u base-api -f   # logs
+systemctl --user restart base-web              # after a rebuild
+```
+
+## Development
+
+```bash
+systemctl --user stop base-api   # dev API wants port 8000
+bash ~/base/scripts/dev.sh       # terminal 1: API with autoreload (docs at /docs)
+bash ~/base/scripts/web.sh       # terminal 2: web with HMR at http://localhost:5173
+```
+
+Start `base-api` again when you're done (`systemctl --user start base-api`).
+The vite dev server coexists fine with `base-web` (different ports).
 
 The web app reaches the API from its own server (SvelteKit `load` functions +
 form actions), so the browser only ever talks to the dashboard — no CORS, and
