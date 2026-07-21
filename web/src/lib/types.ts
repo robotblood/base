@@ -60,6 +60,10 @@ export interface ModuleConfig {
 	// dateField — a meeting last March is in the past but was never "overdue",
 	// so only modules with real deadlines set this.
 	overdueField?: string;
+	// The record's page content: a textarea field name that renders as a
+	// formatted markdown document on the detail page (with a Write/Preview
+	// toggle) and gets a quick-create input on the list page.
+	docField?: string;
 	statusField?: string; // default board axis; also what `doneValues` refers to
 	doneValues?: string[]; // values treated as complete by the "hide done" toggle
 	// Colour per value of `statusField`, from the STATE palette in status.ts.

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
@@ -51,6 +53,22 @@
 			? (item.raw as Record<string, any>)
 			: null
 	);
+
+	// Markdown document (modules with a docField, i.e. notes): rendered by
+	// default, with a Write tab. bodyText backs both tabs and rides into the
+	// record form via a hidden input.
+	let bodyText = $state('');
+	let docTab = $state<'preview' | 'write'>('preview');
+	// ?edit=1 (quick-create) opens Write, but only on arrival — after a save
+	// the document flips to its formatted view.
+	let honorEditParam = true;
+	$effect(() => {
+		if (!mod.docField) return;
+		const v = String(item[mod.docField] ?? '');
+		bodyText = v;
+		docTab = v && !(honorEditParam && page.url.searchParams.get('edit') === '1') ? 'preview' : 'write';
+		honorEditParam = false;
+	});
 
 	let media = $state<MediaItem[]>([]);
 	let mediaCapped = $state(false);
@@ -265,15 +283,71 @@
 		</section>
 	{/if}
 
+	{#if mod.docField}
+		<section class="flex max-w-2xl flex-col gap-3 rounded-[12px] border bg-card px-6 py-5">
+			<div class="flex items-center justify-between">
+				<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DOCUMENT</div>
+				<div class="inline-flex gap-0.5 rounded-[8px] bg-muted p-[3px]">
+					<button
+						type="button"
+						onclick={() => (docTab = 'preview')}
+						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'preview'
+							? 'bg-primary text-primary-foreground'
+							: 'text-foreground/70'}">Preview</button
+					>
+					<button
+						type="button"
+						onclick={() => (docTab = 'write')}
+						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'write'
+							? 'bg-primary text-primary-foreground'
+							: 'text-foreground/70'}">Write</button
+					>
+				</div>
+			</div>
+			{#if docTab === 'write'}
+				<!-- svelte-ignore a11y_autofocus -->
+				<textarea
+					bind:value={bodyText}
+					autofocus
+					onkeydown={(e) => {
+						if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+							e.preventDefault();
+							(document.getElementById('record-form') as HTMLFormElement | null)?.requestSubmit();
+						}
+					}}
+					rows={Math.min(28, Math.max(10, bodyText.split('\n').length + 3))}
+					placeholder={'# Heading\n\nWrite markdown — headings, lists, - [ ] checkboxes, **bold**…\nSave to see it formatted.'}
+					class="w-full resize-y rounded-[9px] border bg-background px-3.5 py-3 font-mono text-[13px] leading-[1.6] outline-none focus:border-ring"
+				></textarea>
+				<div class="font-mono text-[10px] text-muted-foreground">
+					Markdown — Save formats it. Cmd/Ctrl+Enter saves.
+				</div>
+			{:else if bodyText.trim()}
+				<MarkdownDoc source={bodyText} />
+			{:else}
+				<button
+					type="button"
+					onclick={() => (docTab = 'write')}
+					class="cursor-pointer pt-1 text-left text-[13px] text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground/80"
+					>Empty — start writing.</button
+				>
+			{/if}
+		</section>
+	{/if}
+
 	<section class="flex max-w-2xl flex-col gap-4 rounded-[12px] border bg-card px-6 py-5">
 		<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DETAILS</div>
 		<form id="record-form" method="POST" action="?/update" use:enhance={onSave}>
+			{#if mod.docField}
+				<input type="hidden" name={mod.docField} value={bodyText} />
+			{/if}
 			{#key item.id}
 				<ModuleFields
 					fields={mod.fields}
 					{item}
 					relationOptions={data.relationOptions}
 					tagSuggestions={data.tagSuggestions}
+					exclude={mod.docField ? [mod.docField] : []}
 				/>
 			{/key}
 		</form>

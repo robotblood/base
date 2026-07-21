@@ -83,7 +83,9 @@
 	}
 
 	// ---- the derived record set --------------------------------------------
-	const filtered = $derived(filterItems(data.items as Item[], mod, viewState));
+	// A search means "find it wherever it is" — completed/archived included.
+	const effState = $derived(data.q ? { ...viewState, hideDone: false } : viewState);
+	const filtered = $derived(filterItems(data.items as Item[], mod, effState));
 	const sorted = $derived(sortItems(filtered, mod, viewState.sort, viewState.dir));
 
 	// One clock for the whole render, so bucket boundaries can't shift mid-pass.
@@ -182,6 +184,17 @@
 			<form method="GET" data-sveltekit-keepfocus>
 				<SearchBox name="q" value={data.q} />
 			</form>
+			{#if mod.docField}
+				<!-- Notion-style quick note: title, Enter, start writing. -->
+				<form method="POST" action="?/quick" class="flex items-center">
+					<input
+						name="title"
+						placeholder="Quick note — title, Enter…"
+						autocomplete="off"
+						class="w-[210px] rounded-[9px] border bg-card px-3 py-[9px] text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring"
+					/>
+				</form>
+			{/if}
 			<button
 				onclick={() => (createOpen = true)}
 				class="inline-flex cursor-pointer items-center gap-1.5 rounded-[9px] bg-primary px-[15px] py-[9px] text-[13px] font-semibold text-primary-foreground hover:opacity-90"

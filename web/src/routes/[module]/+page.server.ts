@@ -1,4 +1,4 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getModule } from '$lib/modules';
 import { api } from '$lib/server/api';
@@ -42,6 +42,22 @@ export const actions: Actions = {
 			return fail(502, { message: e instanceof Error ? e.message : String(e) });
 		}
 		return { ok: true };
+	},
+
+	// Title → straight into the record's document, ready to write. Only for
+	// modules with a docField (notes).
+	quick: async ({ params, request }) => {
+		const mod = fieldsFor(params.module);
+		if (!mod.docField) return fail(400, { message: 'No quick create for this module' });
+		const title = (await request.formData()).get('title')?.toString().trim();
+		if (!title) return fail(422, { message: 'Title is required' });
+		let id: unknown;
+		try {
+			({ id } = await api.create(mod.key, { [mod.titleField]: title }));
+		} catch (e) {
+			return fail(502, { message: e instanceof Error ? e.message : String(e) });
+		}
+		redirect(303, `/${mod.key}/${id}?edit=1`);
 	},
 
 	// Set a single field on one record — used by the board's drag-to-move.

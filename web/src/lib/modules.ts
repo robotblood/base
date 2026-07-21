@@ -86,6 +86,7 @@ export const MODULES: ModuleConfig[] = [
 		views: ['table', 'board', 'group', 'calendar'],
 		groupFields: ['kind', 'status', 'meeting_type', 'tags', 'meeting_time'],
 		dateField: 'meeting_time',
+		docField: 'body',
 		statusField: 'status',
 		doneValues: ['Completed'],
 		statusColors: {
@@ -235,6 +236,7 @@ export const MODULES: ModuleConfig[] = [
 		views: ['table', 'board', 'group'],
 		groupFields: ['status', 'tags'],
 		statusField: 'status',
+		doneValues: ['archived', 'Archive', 'Complete', 'Completed'],
 		// Lower-case values are what the archive import wrote; the capitalised
 		// ones match the Projects tracker's own stage vocabulary.
 		statusColors: {

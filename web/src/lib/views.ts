@@ -44,7 +44,9 @@ export function readState(params: URLSearchParams, mod: ModuleConfig): ViewState
 		sort: params.get('sort') ?? mod.defaultSort?.field ?? null,
 		dir: dir === 'asc' || dir === 'desc' ? dir : (mod.defaultSort?.dir ?? 'asc'),
 		group: params.get('group') ?? defaultGroupField(mod),
-		hideDone: params.get('done') === '0',
+		// Completed/archived records hide by default — the lists are for what's
+		// current. ?done=1 (the toolbar toggle) brings them back.
+		hideDone: params.get('done') !== '1',
 		filters,
 		month: params.get('month')
 	};
@@ -59,7 +61,7 @@ export function writeState(state: ViewState, mod: ModuleConfig, q: string): stri
 	if (state.sort && state.sort !== mod.defaultSort?.field) p.set('sort', state.sort);
 	if (state.dir !== (mod.defaultSort?.dir ?? 'asc')) p.set('dir', state.dir);
 	if (state.group && state.group !== defaultGroupField(mod)) p.set('group', state.group);
-	if (state.hideDone) p.set('done', '0');
+	if (!state.hideDone) p.set('done', '1');
 	if (state.month) p.set('month', state.month);
 	for (const [field, values] of Object.entries(state.filters)) {
 		if (values.length) p.set(FILTER_PREFIX + field, values.join('|'));

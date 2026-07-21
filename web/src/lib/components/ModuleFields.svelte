@@ -13,13 +13,17 @@
 		fields,
 		item = null,
 		relationOptions = {},
-		tagSuggestions = []
+		tagSuggestions = [],
+		exclude = []
 	}: {
 		fields: FieldSpec[];
 		item?: Record<string, unknown> | null;
 		relationOptions?: Record<string, RelationOption[]>;
 		tagSuggestions?: string[];
+		exclude?: string[]; // fields rendered elsewhere (e.g. the doc editor)
 	} = $props();
+
+	const shown = $derived(fields.filter((f) => !exclude.includes(f.name)));
 
 	// Explicit fg/bg + `color-scheme` (set globally) keep the native dropdown and
 	// its option list readable — the popover-blue-on-white default was unreadable.
@@ -35,7 +39,7 @@
 </script>
 
 <div class="grid gap-4">
-	{#each fields as f (f.name)}
+	{#each shown as f (f.name)}
 		{@const value = item ? item[f.name] : undefined}
 		{#if f.type === 'checkbox'}
 			<label class="flex items-center gap-2 text-sm">
