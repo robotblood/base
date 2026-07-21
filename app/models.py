@@ -86,6 +86,22 @@ class Project(Base, table=True):
     name: str = Field(index=True)
     status: Optional[str] = Field(default=None, index=True)
     description: Optional[str] = None
+    # Tracker fields (the /projects experience). The document-shaped pieces
+    # (phases, milestones, …) are JSONB: they're only ever read/written whole
+    # with their project, so they don't earn their own tables.
+    kind: Optional[str] = Field(default=None, index=True)  # video | live show | music | ...
+    year: Optional[str] = None
+    health: Optional[str] = None  # on-track | at-risk | blocked
+    start: Optional[date] = None
+    due: Optional[date] = Field(default=None, index=True)
+    path: Optional[str] = None  # on-disk folder root, drives media previews
+    phases: list = Field(default_factory=list, sa_type=JSONB)  # [{name, status}]
+    milestones: list = Field(default_factory=list, sa_type=JSONB)  # [{name, date, done}]
+    journal: list = Field(default_factory=list, sa_type=JSONB)  # [{date, title, body}]
+    people: list = Field(default_factory=list, sa_type=JSONB)  # [{name, role}]
+    linked: list = Field(default_factory=list, sa_type=JSONB)  # [{type, title, status}]
+    activity: list = Field(default_factory=list, sa_type=JSONB)  # [{date, text}]
+    rundown: Optional[dict] = Field(default=None, sa_type=JSONB)  # {sections: [...]}
 
 
 class Media(Base, table=True):
