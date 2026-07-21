@@ -51,9 +51,11 @@ export class Tracker {
 		this.route = { name: 'project', id };
 		this.wsTab = 'overview';
 		void this.loadFiles(id);
+		this.startWatch(id);
 	}
 	goList = () => {
 		this.route = { name: 'list' };
+		this.stopWatch();
 	};
 
 	// ---- real on-disk files --------------------------------------------------
@@ -72,9 +74,9 @@ export class Tracker {
 		}
 	}
 
-	async loadFiles(id: string) {
+	async loadFiles(id: string, force = false) {
 		const p = this.find(id);
-		if (!p || !p.path || this.filesLoaded[id]) return;
+		if (!p || !p.path || (this.filesLoaded[id] && !force)) return;
 		this.filesLoaded[id] = true;
 		try {
 			const res = await fetch(`/projects/${id}/files`);
@@ -90,9 +92,40 @@ export class Tracker {
 					meta: it.seq ? `sequence · ${it.count} frames` : it.kind
 				})
 			);
+			// Bump the cache-buster so thumbs of edited files refetch (the
+			// server thumb cache is keyed by mtime; the browser's isn't).
+			if (force) this.fileVer[id] = (this.fileVer[id] ?? 0) + 1;
 		} catch {
 			this.filesLoaded[id] = false;
 		}
+	}
+
+	// ---- folder watching (SSE) -----------------------------------------------
+	// While a project is open, the server watches its folder and pushes
+	// "changed" events; the file list and thumbs refresh themselves.
+	fileVer = $state<Record<string, number>>({});
+	watching = $state(false);
+	private es: EventSource | null = null;
+	private startWatch(id: string) {
+		this.stopWatch();
+		const p = this.find(id);
+		if (!p?.path || typeof EventSource === 'undefined') return;
+		const es = new EventSource(`/projects/${id}/watch`);
+		this.es = es;
+		es.onmessage = (ev) => {
+			if (ev.data === 'watching') this.watching = true;
+			else if (ev.data === 'changed') void this.loadFiles(id, true);
+		};
+		// Server gone or drive unmounted — stop rather than auto-reconnect
+		// forever; a manual refresh or reopening the project retries.
+		es.onerror = () => {
+			if (this.es === es) this.stopWatch();
+		};
+	}
+	stopWatch() {
+		this.es?.close();
+		this.es = null;
+		this.watching = false;
 	}
 
 	// ---- project mutations ---------------------------------------------------
@@ -176,6 +209,7 @@ export class Tracker {
 		const activity = this.logActivity(p, `Linked folder ${path}`);
 		await persist.update(pid, { path, activity });
 		void this.loadFiles(pid);
+		this.startWatch(pid);
 	}
 
 	// ---- new project modal ---------------------------------------------------

@@ -4,6 +4,7 @@
 	// app's existing shell (sidebar + theme toggle live in the root layout).
 	// This static route overrides the generic /[module] page; data is real
 	// (FastAPI via the server load), mutations persist through /projects/sync.
+	import { onDestroy } from 'svelte';
 	import type { PageProps } from './$types';
 	import { Tracker } from '$lib/projects/tracker.svelte';
 	import ProjectsListView from '$lib/components/projects/ProjectsListView.svelte';
@@ -18,6 +19,7 @@
 	// svelte-ignore state_referenced_locally
 	const t = new Tracker(data.projects);
 	const current = $derived(t.current);
+	onDestroy(() => t.stopWatch());
 </script>
 
 <svelte:head><title>base — Projects</title></svelte:head>

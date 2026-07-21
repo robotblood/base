@@ -5,7 +5,12 @@
 	import { filePreview, type ProjFile } from '$lib/projects/data';
 	import FileThumb from './FileThumb.svelte';
 
-	let { pid, file, size = 40 }: { pid: string; file: ProjFile; size?: number } = $props();
+	let {
+		pid,
+		file,
+		size = 40,
+		ver = 0
+	}: { pid: string; file: ProjFile; size?: number; ver?: number } = $props();
 
 	let failed = $state(false);
 	const real = $derived(
@@ -15,7 +20,7 @@
 
 {#if real}
 	<img
-		src="/projects/{pid}/thumb?p={encodeURIComponent(file.rel!)}&w={size * 2}"
+		src="/projects/{pid}/thumb?p={encodeURIComponent(file.rel!)}&w={size * 2}&v={ver}"
 		alt={file.name}
 		loading="lazy"
 		onerror={() => (failed = true)}

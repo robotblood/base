@@ -313,11 +313,18 @@
 
 				<!-- Files -->
 				<div class={cardClass}>
-					<div class="{sectionLabel} mb-1.5">FILES</div>
+					<div class="{sectionLabel} mb-1.5 flex items-center gap-2">
+						FILES
+						{#if t.watching}
+							<span class="inline-flex items-center gap-1 text-[9px] text-[#2f7d5b]" title="Watching this folder — the list refreshes when files change">
+								<span class="size-1.5 animate-pulse rounded-full bg-[#2f7d5b]"></span>LIVE
+							</span>
+						{/if}
+					</div>
 					{#each p.files as f (f.rel ?? f.name)}
 						{@const pv = filePreview(f.name)}
 						<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
-							<MediaThumb pid={p.id} file={f} size={40} />
+							<MediaThumb pid={p.id} file={f} size={40} ver={t.fileVer[p.id] ?? 0} />
 							<div class="min-w-0 flex-1">
 								<div class="truncate text-[13.5px]">{f.name}</div>
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
