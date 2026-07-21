@@ -14,6 +14,7 @@
 		LINK_CODE_MAP,
 		type Project
 	} from '$lib/projects/data';
+	import AudioFileRow from './AudioFileRow.svelte';
 	import MediaThumb from './MediaThumb.svelte';
 	import ProjectRundown from './ProjectRundown.svelte';
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
@@ -322,9 +323,14 @@
 						{/if}
 					</div>
 					{#each p.files as f (f.rel ?? f.name)}
-						{@const pv = filePreview(f.name)}
-						<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
-							<MediaThumb pid={p.id} file={f} size={40} ver={t.fileVer[p.id] ?? 0} />
+						{#if f.kind === 'audio' && f.rel}
+							{#key f.rel}
+								<AudioFileRow {t} pid={p.id} file={f} />
+							{/key}
+						{:else}
+							{@const pv = filePreview(f.name)}
+							<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
+								<MediaThumb pid={p.id} file={f} size={40} ver={t.fileVer[p.id] ?? 0} />
 							<div class="min-w-0 flex-1">
 								<div class="truncate text-[13.5px]">{f.name}</div>
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
@@ -345,7 +351,8 @@
 									>
 								</div>
 							{/if}
-						</div>
+							</div>
+						{/if}
 					{:else}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
 							{#if p.path}
