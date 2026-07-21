@@ -327,6 +327,50 @@ export class Tracker {
 		links.splice(i, 1);
 		this.saveDetails(pid);
 	}
+	// Print specs — a flat merge into details.print.
+	setPrintSpec(pid: string, patch: Record<string, string>) {
+		const p = this.find(pid);
+		if (!p) return;
+		p.details = p.details ?? {};
+		p.details.print = { ...p.details.print, ...patch };
+		this.saveDetails(pid);
+	}
+	// Video/motion deliverables checklist in details.deliverables.
+	addDeliverable(pid: string, name: string, spec: string) {
+		const p = this.find(pid);
+		if (!p || !name.trim()) return;
+		p.details = p.details ?? {};
+		p.details.deliverables = p.details.deliverables ?? [];
+		p.details.deliverables.push({ name: name.trim(), spec: spec.trim(), done: false });
+		this.saveDetails(pid);
+	}
+	updateDeliverable(pid: string, i: number, patch: { name?: string; spec?: string }) {
+		const d = this.find(pid)?.details?.deliverables?.[i];
+		if (!d) return;
+		Object.assign(d, patch);
+		this.saveDetails(pid);
+	}
+	toggleDeliverable(pid: string, i: number) {
+		const p = this.find(pid);
+		const d = p?.details?.deliverables?.[i];
+		if (!p || !d) return;
+		d.done = !d.done;
+		if (d.done) {
+			const activity = this.logActivity(p, `Delivered "${d.name}"`);
+			void persist.update(pid, {
+				details: $state.snapshot(p.details ?? {}),
+				activity
+			});
+			return;
+		}
+		this.saveDetails(pid);
+	}
+	removeDeliverable(pid: string, i: number) {
+		const ds = this.find(pid)?.details?.deliverables;
+		if (!ds) return;
+		ds.splice(i, 1);
+		this.saveDetails(pid);
+	}
 	rename(pid: string, name: string) {
 		const p = this.find(pid);
 		if (!p || !name.trim() || p.name === name.trim()) return;

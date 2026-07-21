@@ -67,6 +67,7 @@
 	let childDraft = $state('');
 	let linkSel = $state('');
 	let linkDraft = $state({ label: '', url: '' });
+	let dlDraft = $state({ name: '', spec: '' });
 
 	function submitTask() {
 		if (!taskDraft.title.trim()) return;
@@ -87,6 +88,11 @@
 		if (!linkDraft.url.trim()) return;
 		t.addLink(p.id, linkDraft.label, linkDraft.url);
 		linkDraft = { label: '', url: '' };
+	}
+	function submitDeliverable() {
+		if (!dlDraft.name.trim()) return;
+		t.addDeliverable(p.id, dlDraft.name, dlDraft.spec);
+		dlDraft = { name: '', spec: '' };
 	}
 
 	const cardClass = 'rounded-[12px] border bg-card p-[18px_20px]';
@@ -552,6 +558,123 @@
 			{/if}
 		{/snippet}
 
+		{#snippet specsC()}
+			{#if info.key === 'print'}
+				{@const sp = p.details?.print ?? {}}
+				{@const specRows = [
+					{ key: 'size', label: 'SIZE', ph: '18×24 in' },
+					{ key: 'bleed', label: 'BLEED', ph: '0.125 in' },
+					{ key: 'color', label: 'COLOR', ph: 'CMYK' },
+					{ key: 'stock', label: 'STOCK', ph: '100# gloss cover' },
+					{ key: 'qty', label: 'QTY', ph: '500' },
+					{ key: 'vendor', label: 'VENDOR', ph: 'printer / shop' }
+				]}
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-2">PRINT SPECS</div>
+					{#each specRows as row (row.key)}
+						<div class="flex items-center gap-3 py-1">
+							<span
+								class="w-[58px] flex-none font-mono text-[10px] tracking-[0.06em] text-muted-foreground"
+								>{row.label}</span
+							>
+							<input
+								value={(sp as Record<string, string>)[row.key] ?? ''}
+								placeholder={row.ph}
+								onchange={(e) => t.setPrintSpec(p.id, { [row.key]: e.currentTarget.value })}
+								aria-label={row.label}
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 font-mono text-[12px] text-foreground/70"
+							/>
+						</div>
+					{/each}
+					<div class="flex items-center gap-3 py-1">
+						<span
+							class="w-[58px] flex-none font-mono text-[10px] tracking-[0.06em] text-muted-foreground"
+							>PROOF</span
+						>
+						<input
+							type="date"
+							value={sp.proofDue ?? ''}
+							onchange={(e) => t.setPrintSpec(p.id, { proofDue: e.currentTarget.value })}
+							aria-label="Proof deadline"
+							class="{ghost} flex-none px-1 py-0.5 font-mono text-[12px] text-foreground/70"
+						/>
+						{#if sp.proofDue}
+							{@const pd = dueInfo(sp.proofDue, p.status)}
+							<span class="font-mono text-[11px]" style="color:{pd.color};">{pd.label}</span>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		{/snippet}
+
+		{#snippet deliverablesC()}
+			{#if info.key === 'video' || info.key === 'motion graphics'}
+				{@const ds = p.details?.deliverables ?? []}
+				{@const dDone = ds.filter((x) => x.done).length}
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-1.5">
+						DELIVERABLES
+						{#if ds.length}<span class="text-muted-foreground/70">· {dDone}/{ds.length}</span>{/if}
+					</div>
+					{#each ds as d, i (i)}
+						<div class="group/dl flex items-center gap-3 border-t py-2 first:border-t-0">
+							<button
+								onclick={() => t.toggleDeliverable(p.id, i)}
+								title={d.done ? 'Mark not delivered' : 'Mark delivered'}
+								class="grid size-[19px] flex-none place-items-center rounded-[5px] border-[1.5px]"
+								style={d.done
+									? 'background:#2f7d5b;border-color:#2f7d5b;'
+									: 'background:transparent;border-color:#c9c3b4;'}
+							>
+								{#if d.done}<span class="text-[12px] leading-none text-white">✓</span>{/if}
+							</button>
+							<input
+								value={d.name}
+								onchange={(e) => t.updateDeliverable(p.id, i, { name: e.currentTarget.value })}
+								aria-label="Deliverable name"
+								class="{ghost} min-w-0 flex-1 px-1 py-0.5 text-[13.5px] {d.done
+									? 'text-muted-foreground line-through'
+									: ''}"
+							/>
+							<input
+								value={d.spec}
+								placeholder="16:9 · 4K · ProRes"
+								onchange={(e) => t.updateDeliverable(p.id, i, { spec: e.currentTarget.value })}
+								aria-label="Deliverable spec"
+								class="{ghost} w-[130px] flex-none px-1 py-0.5 text-right font-mono text-[10px] text-muted-foreground"
+							/>
+							<button
+								onclick={() => t.removeDeliverable(p.id, i)}
+								title="Remove deliverable"
+								class="{rowX} group-hover/dl:block"><X class="size-3.5" /></button
+							>
+						</div>
+					{:else}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">
+							The cuts this project owes: master, verticals, thumbnails…
+						</div>
+					{/each}
+					<div class="mt-2 flex items-center gap-2 border-t pt-3">
+						<input
+							bind:value={dlDraft.name}
+							onkeydown={(e) => e.key === 'Enter' && submitDeliverable()}
+							placeholder="Add a deliverable…"
+							class={addInput}
+						/>
+						<input
+							bind:value={dlDraft.spec}
+							onkeydown={(e) => e.key === 'Enter' && submitDeliverable()}
+							placeholder="spec"
+							class="{addInput} max-w-[120px] font-mono text-[11px]"
+						/>
+						<button onclick={submitDeliverable} disabled={!dlDraft.name.trim()} class={addBtn}
+							>Add</button
+						>
+					</div>
+				</div>
+			{/if}
+		{/snippet}
+
 		{#snippet peopleC()}
 			<div class={cardClass}>
 				<div class="{sectionLabel} mb-1.5 flex items-center justify-between">
@@ -737,7 +860,7 @@
 						: [phasesC, upNextC, tasksC, tracksC, milestonesC]}
 		{@const right =
 			fam === 'visual'
-				? [detailsC, milestonesC, peopleC, notesC, linksC, linkedC, activityC]
+				? [detailsC, specsC, deliverablesC, milestonesC, peopleC, notesC, linksC, linkedC, activityC]
 				: fam === 'software'
 					? [detailsC, linksC, notesC, peopleC, filesC, linkedC, activityC]
 					: [detailsC, peopleC, notesC, filesC, linksC, linkedC, activityC]}

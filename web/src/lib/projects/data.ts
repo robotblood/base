@@ -97,7 +97,7 @@ export interface Project {
 	source?: string; // where the record came from (import source)
 	path?: string; // on-disk folder root — enables real file previews
 	parentId?: string; // umbrella project (e.g. a song's album)
-	details?: { links?: { label: string; url: string }[] }; // kind-specific extras
+	details?: ProjectDetails; // kind-specific extras
 	phases: Phase[];
 	tasks: Task[];
 	milestones: Milestone[];
@@ -107,6 +107,27 @@ export interface Project {
 	people: PersonRef[];
 	activity: ActivityEntry[];
 	rundown?: Rundown;
+}
+
+// Kind-specific extras, stored whole in the details JSONB column.
+export interface PrintSpecs {
+	size?: string; // e.g. 18×24 in
+	bleed?: string; // e.g. 0.125 in
+	color?: string; // CMYK | RGB | PMS …
+	stock?: string;
+	qty?: string;
+	vendor?: string;
+	proofDue?: string; // ISO date
+}
+export interface Deliverable {
+	name: string; // e.g. Master, Vertical cut, Thumbnail
+	spec: string; // e.g. 16:9 · 4K · ProRes 422
+	done: boolean;
+}
+export interface ProjectDetails {
+	links?: { label: string; url: string }[];
+	print?: PrintSpecs;
+	deliverables?: Deliverable[];
 }
 
 export interface Stage {
