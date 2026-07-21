@@ -65,6 +65,8 @@ class Event(Base, table=True):
     location: Optional[str] = None
     kind: Optional[str] = Field(default="event", index=True)  # event | performance | deadline
     notes: Optional[str] = None
+    # Link to a projects.id (loose reference, same convention as todos/notes).
+    project_id: Optional[int] = Field(default=None, index=True)
 
 
 class Hardware(Base, table=True):

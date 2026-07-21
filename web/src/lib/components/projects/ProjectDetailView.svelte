@@ -50,6 +50,7 @@
 	);
 	const rowFiles = $derived(p.files.filter((f) => !gridFiles.includes(f)));
 
+	const todayISO = new Date().toISOString().slice(0, 10);
 	const nextDue = $derived.by(() => {
 		const up: { date: string; title: string; kind: string }[] = [];
 		p.tasks.forEach((x) => {
@@ -58,9 +59,16 @@
 		p.milestones.forEach((m) => {
 			if (!m.done && m.date) up.push({ date: m.date, title: m.name, kind: 'Milestone' });
 		});
+		p.events.forEach((e) => {
+			if (e.when && e.when.slice(0, 10) >= todayISO)
+				up.push({ date: e.when.slice(0, 10), title: e.title, kind: 'Event' });
+		});
 		up.sort((a, b) => (a.date < b.date ? -1 : 1));
 		return up.slice(0, 3);
 	});
+
+	const fmtWhen = (when: string) =>
+		when ? `${fmtISO(when.slice(0, 10))}${when.length >= 16 ? ` · ${when.slice(11, 16)}` : ''}` : '—';
 
 	// Draft state for the add rows.
 	let taskDraft = $state({ title: '', due: '' });
@@ -70,6 +78,7 @@
 	let linkDraft = $state({ label: '', url: '' });
 	let dlDraft = $state({ name: '', spec: '' });
 	let noteDraft = $state('');
+	let evDraft = $state({ title: '', when: '' });
 
 	function submitTask() {
 		if (!taskDraft.title.trim()) return;
@@ -100,6 +109,11 @@
 		if (!noteDraft.trim()) return;
 		void t.addNote(p.id, noteDraft);
 		noteDraft = '';
+	}
+	function submitEvent() {
+		if (!evDraft.title.trim()) return;
+		void t.addEvent(p.id, evDraft.title, evDraft.when);
+		evDraft = { title: '', when: '' };
 	}
 
 	const cardClass = 'rounded-[12px] border bg-card p-[18px_20px]';
@@ -565,6 +579,68 @@
 			{/if}
 		{/snippet}
 
+		{#snippet scheduleC()}
+			{#if fam === 'live' || p.events.length}
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-1.5">
+						{fam === 'live' ? 'SHOWS' : 'SCHEDULE'}
+						{#if p.events.length}<span class="text-muted-foreground/70">· {p.events.length}</span>{/if}
+					</div>
+					{#each p.events as ev, i (ev.id)}
+						{@const past = !!ev.when && ev.when.slice(0, 10) < todayISO}
+						<div class="group/ev flex items-center gap-3 border-t py-2 first:border-t-0">
+							<span
+								class="w-[92px] flex-none font-mono text-[11px] {past
+									? 'text-muted-foreground/60'
+									: 'text-foreground/70'}">{fmtWhen(ev.when)}</span
+							>
+							<a
+								href="/events/{ev.id}"
+								class="min-w-0 flex-1 truncate text-[14px] hover:underline {past
+									? 'text-muted-foreground'
+									: ''}">{ev.title}</a
+							>
+							{#if ev.location}
+								<span class="max-w-[120px] flex-none truncate font-mono text-[10px] text-muted-foreground"
+									>{ev.location}</span
+								>
+							{/if}
+							{#if ev.kind === 'deadline'}
+								<span
+									class="flex-none rounded-full bg-accent px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.05em] text-destructive"
+									>deadline</span
+								>
+							{/if}
+							<button
+								onclick={() => t.removeEvent(p.id, i)}
+								title="Delete this event (the record itself)"
+								class="{rowX} group-hover/ev:block"><X class="size-3.5" /></button
+							>
+						</div>
+					{:else}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">
+							No dates yet — they land on the Calendar, linked here.
+						</div>
+					{/each}
+					<div class="mt-2 flex items-center gap-2 border-t pt-3">
+						<input
+							bind:value={evDraft.title}
+							onkeydown={(e) => e.key === 'Enter' && submitEvent()}
+							placeholder={fam === 'live' ? 'Add a show — city, venue…' : 'Add a date…'}
+							class={addInput}
+						/>
+						<input
+							type="datetime-local"
+							bind:value={evDraft.when}
+							aria-label="When"
+							class="w-[190px] flex-none rounded-[7px] border bg-card px-2 py-[7px] font-mono text-[11px] text-muted-foreground outline-none focus:border-ring"
+						/>
+						<button onclick={submitEvent} disabled={!evDraft.title.trim()} class={addBtn}>Add</button>
+					</div>
+				</div>
+			{/if}
+		{/snippet}
+
 		{#snippet specsC()}
 			{#if info.key === 'print'}
 				{@const sp = p.details?.print ?? {}}
@@ -876,15 +952,19 @@
 				? [filesC, phasesC, upNextC, tasksC, tracksC]
 				: fam === 'software'
 					? [tasksC, phasesC, upNextC, milestonesC, tracksC]
-					: info.key === 'album'
-						? [tracksC, phasesC, upNextC, tasksC, milestonesC]
-						: [phasesC, upNextC, tasksC, tracksC, milestonesC]}
+					: fam === 'live'
+						? [phasesC, scheduleC, upNextC, tasksC, tracksC, milestonesC]
+						: info.key === 'album'
+							? [tracksC, phasesC, upNextC, tasksC, milestonesC]
+							: [phasesC, upNextC, tasksC, tracksC, milestonesC]}
 		{@const right =
 			fam === 'visual'
-				? [detailsC, specsC, deliverablesC, milestonesC, peopleC, notesC, linksC, linkedC, activityC]
+				? [detailsC, specsC, deliverablesC, scheduleC, milestonesC, peopleC, notesC, linksC, linkedC, activityC]
 				: fam === 'software'
-					? [detailsC, linksC, notesC, peopleC, filesC, linkedC, activityC]
-					: [detailsC, peopleC, notesC, filesC, linksC, linkedC, activityC]}
+					? [detailsC, linksC, scheduleC, notesC, peopleC, filesC, linkedC, activityC]
+					: fam === 'live'
+						? [detailsC, peopleC, notesC, filesC, linksC, linkedC, activityC]
+						: [detailsC, scheduleC, peopleC, notesC, filesC, linksC, linkedC, activityC]}
 		<div
 			class="grid items-start gap-5"
 			style={t.layout === 'console'

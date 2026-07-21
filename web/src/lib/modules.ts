@@ -109,6 +109,7 @@ export const MODULES: ModuleConfig[] = [
 			{ header: 'Kind', field: 'kind', render: 'badge' },
 			{ header: 'Starts', field: 'starts_at', sort: 'date' },
 			{ header: 'Location', field: 'location' },
+			{ header: 'Project', field: 'project_id_label', hidden: true },
 			{ header: 'Tags', field: 'tags', render: 'tags', hidden: true }
 		],
 		fields: [
@@ -121,6 +122,7 @@ export const MODULES: ModuleConfig[] = [
 				// are hand-entry values kept from the original spec.
 				options: ['event', 'meeting', 'daily-note', 'performance', 'deadline']
 			},
+			{ name: 'project_id', label: 'Project', type: 'relation', ref: 'projects' },
 			{ name: 'starts_at', label: 'Starts', type: 'datetime' },
 			{ name: 'ends_at', label: 'Ends', type: 'datetime' },
 			{ name: 'all_day', label: 'All day', type: 'checkbox' },

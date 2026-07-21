@@ -40,7 +40,22 @@ export function toProjNote(note: Row) {
 	};
 }
 
-export function mapProject(row: Row, todos: Row[] = [], notes: Row[] = []): Project {
+export function toProjEvent(ev: Row) {
+	return {
+		id: String(ev.id),
+		title: str(ev.title),
+		when: str(ev.starts_at),
+		location: str(ev.location),
+		kind: str(ev.kind) || 'event'
+	};
+}
+
+export function mapProject(
+	row: Row,
+	todos: Row[] = [],
+	notes: Row[] = [],
+	events: Row[] = []
+): Project {
 	const id = String(row.id);
 	const health = str(row.health);
 	return {
@@ -67,6 +82,10 @@ export function mapProject(row: Row, todos: Row[] = [], notes: Row[] = []): Proj
 			.filter((n) => String(n.project_id) === id)
 			.map(toProjNote)
 			.sort((a, b) => (a.date < b.date ? 1 : -1)),
+		events: events
+			.filter((e) => String(e.project_id) === id)
+			.map(toProjEvent)
+			.sort((a, b) => (a.when < b.when ? -1 : 1)),
 		files: [],
 		linked: arr(row.linked),
 		people: arr(row.people),

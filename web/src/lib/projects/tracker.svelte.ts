@@ -5,7 +5,7 @@ import { goto } from '$app/navigation';
 import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile, type Song } from './data';
 import { emptyReady, kindInfo, presetPhases } from './kinds';
-import { mapProject, toProjNote, toTask } from './map';
+import { mapProject, toProjEvent, toProjNote, toTask } from './map';
 import { persist } from './sync';
 
 export type ListView = 'board' | 'list' | 'timeline';
@@ -283,6 +283,29 @@ export class Tracker {
 		if (!p || !n) return;
 		p.notes.splice(i, 1);
 		void persist.noteDelete(n.id);
+	}
+
+	// Project events are real Calendar records (events.project_id) — tour
+	// dates on a live show land as 'performance', everything else as 'event'.
+	async addEvent(pid: string, title: string, when: string) {
+		const p = this.find(pid);
+		if (!p || !title.trim()) return;
+		const row = await persist.eventCreate({
+			title: title.trim(),
+			starts_at: when || null,
+			kind: kindInfo(p.kind).family === 'live' ? 'performance' : 'event',
+			project_id: Number(pid)
+		});
+		if (!row) return;
+		p.events.push(toProjEvent(row));
+		p.events.sort((a, b) => (a.when < b.when ? -1 : 1));
+	}
+	removeEvent(pid: string, i: number) {
+		const p = this.find(pid);
+		const ev = p?.events[i];
+		if (!p || !ev) return;
+		p.events.splice(i, 1);
+		void persist.eventDelete(ev.id);
 	}
 	addPerson(pid: string) {
 		const p = this.find(pid);

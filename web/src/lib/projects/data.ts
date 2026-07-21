@@ -31,6 +31,14 @@ export interface ProjNote {
 	body: string;
 	kind: string; // note | meeting | journal
 }
+// A real Calendar event linked to the project (events.project_id).
+export interface ProjEvent {
+	id: string;
+	title: string;
+	when: string; // ISO datetime (may be empty)
+	location: string;
+	kind: string; // event | performance | deadline | …
+}
 export interface ProjFile {
 	name: string;
 	meta: string;
@@ -105,6 +113,7 @@ export interface Project {
 	tasks: Task[];
 	milestones: Milestone[];
 	notes: ProjNote[];
+	events: ProjEvent[];
 	files: ProjFile[];
 	linked: Linked[];
 	people: PersonRef[];
