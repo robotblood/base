@@ -2,13 +2,13 @@
 Description=base — web dashboard (SvelteKit, adapter-node build)
 Wants=base-api.service
 After=base-api.service
+StartLimitIntervalSec=0
 
 [Service]
 ExecStart=%h/base/scripts/web-serve.sh
 WorkingDirectory=%h/base/web
 Restart=always
 RestartSec=3
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=default.target
