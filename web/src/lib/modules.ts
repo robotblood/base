@@ -165,6 +165,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'cpu', label: 'CPU', type: 'text' },
 			{ name: 'quantity', label: 'Quantity', type: 'number' },
 			{ name: 'power_w', label: 'Power (W)', type: 'number' },
+			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'group'],
@@ -183,6 +184,7 @@ export const MODULES: ModuleConfig[] = [
 		fields: [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
 			{ name: 'url', label: 'URL', type: 'text' },
+			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'group'],

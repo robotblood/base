@@ -77,12 +77,14 @@ class Hardware(Base, table=True):
     cpu: Optional[str] = None
     quantity: Optional[int] = 1
     power_w: Optional[float] = None
+    path: Optional[str] = None  # manuals, photos, config backups — media previews
 
 
 class Software(Base, table=True):
     __tablename__ = "software"
     name: str = Field(index=True)
     url: Optional[str] = None
+    path: Optional[str] = None  # installers, licenses, project templates — media previews
 
 
 class Project(Base, table=True):
