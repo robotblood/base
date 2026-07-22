@@ -109,6 +109,9 @@ export const MODULES: ModuleConfig[] = [
 			{ header: 'Kind', field: 'kind', render: 'badge' },
 			{ header: 'Starts', field: 'starts_at', sort: 'date' },
 			{ header: 'Location', field: 'location' },
+			{ header: 'Contact', field: 'contact_id_label', hidden: true },
+			{ header: 'Phone', field: 'phone', hidden: true },
+			{ header: 'Address', field: 'address', hidden: true },
 			{ header: 'Project', field: 'project_id_label', hidden: true },
 			{ header: 'Tags', field: 'tags', render: 'tags', hidden: true }
 		],
@@ -126,7 +129,18 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'starts_at', label: 'Starts', type: 'datetime' },
 			{ name: 'ends_at', label: 'Ends', type: 'datetime' },
 			{ name: 'all_day', label: 'All day', type: 'checkbox' },
+			{
+				name: 'status',
+				label: 'Show status',
+				type: 'select',
+				// The live-show pipeline (performances); other kinds leave it blank.
+				options: ['Announced', 'Advancing', 'Confirmed', 'Completed', 'Cancelled']
+			},
 			{ name: 'location', label: 'Location', type: 'text' },
+			{ name: 'address', label: 'Address', type: 'text' },
+			{ name: 'contact_id', label: 'Contact', type: 'relation', ref: 'people' },
+			{ name: 'phone', label: 'Phone', type: 'text' },
+			{ name: 'email', label: 'Email', type: 'text' },
 			{ name: 'notes', label: 'Notes', type: 'textarea' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],

@@ -20,6 +20,7 @@
 	import FileRowActions from './FileRowActions.svelte';
 	import MediaThumb from './MediaThumb.svelte';
 	import ProjectRundown from './ProjectRundown.svelte';
+	import ShowsList from './ShowsList.svelte';
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
@@ -51,6 +52,13 @@
 	const rowFiles = $derived(p.files.filter((f) => !gridFiles.includes(f)));
 
 	const todayISO = new Date().toISOString().slice(0, 10);
+	// Each Up Next kind gets its own color so the list scans at a glance.
+	const UP_NEXT_COLORS: Record<string, string> = {
+		Task: '#3a6ea5',
+		Milestone: '#c68a1a',
+		Show: '#2f7d5b',
+		Event: '#2f7d5b'
+	};
 	const nextDue = $derived.by(() => {
 		const up: { date: string; title: string; kind: string }[] = [];
 		p.tasks.forEach((x) => {
@@ -61,7 +69,7 @@
 		});
 		p.events.forEach((e) => {
 			if (e.when && e.when.slice(0, 10) >= todayISO)
-				up.push({ date: e.when.slice(0, 10), title: e.title, kind: 'Event' });
+				up.push({ date: e.when.slice(0, 10), title: e.title, kind: fam === 'live' ? 'Show' : 'Event' });
 		});
 		up.sort((a, b) => (a.date < b.date ? -1 : 1));
 		return up.slice(0, 3);
@@ -78,7 +86,7 @@
 	let linkDraft = $state({ label: '', url: '' });
 	let dlDraft = $state({ name: '', spec: '' });
 	let noteDraft = $state('');
-	let evDraft = $state({ title: '', when: '' });
+	let evDraft = $state({ title: '', when: '', location: '' });
 	let personSel = $state('');
 	let personDraft = $state('');
 
@@ -114,8 +122,8 @@
 	}
 	function submitEvent() {
 		if (!evDraft.title.trim()) return;
-		void t.addEvent(p.id, evDraft.title, evDraft.when);
-		evDraft = { title: '', when: '' };
+		void t.addEvent(p.id, evDraft.title, evDraft.when, evDraft.location);
+		evDraft = { title: '', when: '', location: '' };
 	}
 	function submitPerson() {
 		if (!personDraft.trim()) return;
@@ -287,12 +295,16 @@
 			{#if nextDue.length}
 				<div class="rounded-[12px] border border-signal/30 bg-signal/10 p-[18px_20px]">
 					<div class="mb-1.5 font-mono text-[11px] tracking-[0.12em] text-signal">UP NEXT</div>
-					{#each nextDue as n (n.title)}
+					{#each nextDue as n, i (i)}
 						{@const nd = dueInfo(n.date, p.status)}
+						{@const kc = UP_NEXT_COLORS[n.kind] ?? '#8a8577'}
 						<div class="flex items-center gap-3 border-t border-signal/20 py-[11px] first:border-t-0">
-							<span class="w-[72px] font-mono text-[9px] uppercase tracking-[0.1em] text-signal"
-								>{n.kind}</span
+							<span
+								class="flex w-[86px] flex-none items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.1em]"
+								style="color:{kc};"
 							>
+								<span class="size-[6px] flex-none rounded-full" style="background:{kc};"></span>{n.kind}
+							</span>
 							<span class="flex-1 text-[14px]">{n.title}</span>
 							<span class="font-mono text-[12px] font-semibold" style="color:{nd.color};"
 								>{nd.label}</span
@@ -587,42 +599,60 @@
 		{/snippet}
 
 		{#snippet scheduleC()}
-			{#if fam === 'live' || p.events.length}
+			{#if fam === 'live'}
+				<ShowsList {t} {p} />
+			{:else if p.events.length}
 				<div class={cardClass}>
 					<div class="{sectionLabel} mb-1.5">
-						{fam === 'live' ? 'SHOWS' : 'SCHEDULE'}
+						SCHEDULE
 						{#if p.events.length}<span class="text-muted-foreground/70">· {p.events.length}</span>{/if}
 					</div>
 					{#each p.events as ev, i (ev.id)}
 						{@const past = !!ev.when && ev.when.slice(0, 10) < todayISO}
-						<div class="group/ev flex items-center gap-3 border-t py-2 first:border-t-0">
-							<span
-								class="w-[92px] flex-none font-mono text-[11px] {past
-									? 'text-muted-foreground/60'
-									: 'text-foreground/70'}">{fmtWhen(ev.when)}</span
-							>
-							<a
-								href="/events/{ev.id}"
-								class="min-w-0 flex-1 truncate text-[14px] hover:underline {past
-									? 'text-muted-foreground'
-									: ''}">{ev.title}</a
-							>
-							{#if ev.location}
-								<span class="max-w-[120px] flex-none truncate font-mono text-[10px] text-muted-foreground"
-									>{ev.location}</span
-								>
-							{/if}
-							{#if ev.kind === 'deadline'}
+						{@const contact = ev.contactId
+							? t.directory.find((d) => d.id === ev.contactId)?.name
+							: undefined}
+						<div class="group/ev border-t py-2 first:border-t-0">
+							<div class="flex items-center gap-3">
 								<span
-									class="flex-none rounded-full bg-accent px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.05em] text-destructive"
-									>deadline</span
+									class="w-[92px] flex-none font-mono text-[11px] {past
+										? 'text-muted-foreground/60'
+										: 'text-foreground/70'}">{fmtWhen(ev.when)}</span
 								>
+								<a
+									href="/events/{ev.id}"
+									class="min-w-0 flex-1 truncate text-[14px] hover:underline {past
+										? 'text-muted-foreground'
+										: ''}">{ev.title}</a
+								>
+								{#if ev.location}
+									<span class="max-w-[120px] flex-none truncate font-mono text-[10px] text-muted-foreground"
+										>{ev.location}</span
+									>
+								{/if}
+								{#if ev.kind === 'deadline'}
+									<span
+										class="flex-none rounded-full bg-accent px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.05em] text-destructive"
+										>deadline</span
+									>
+								{/if}
+								<button
+									onclick={() => t.removeEvent(p.id, i)}
+									title="Delete this event (the record itself)"
+									class="{rowX} group-hover/ev:block"><X class="size-3.5" /></button
+								>
+							</div>
+							{#if contact || ev.phone || ev.address}
+								<div
+									class="mt-[3px] flex flex-wrap items-center gap-x-3 pl-[104px] font-mono text-[10px] text-muted-foreground"
+								>
+									{#if contact}
+										<a href="/people/{ev.contactId}" class="hover:underline">☎ {contact}</a>
+									{/if}
+									{#if ev.phone}<span>{ev.phone}</span>{/if}
+									{#if ev.address}<span class="truncate">{ev.address}</span>{/if}
+								</div>
 							{/if}
-							<button
-								onclick={() => t.removeEvent(p.id, i)}
-								title="Delete this event (the record itself)"
-								class="{rowX} group-hover/ev:block"><X class="size-3.5" /></button
-							>
 						</div>
 					{:else}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
@@ -633,8 +663,14 @@
 						<input
 							bind:value={evDraft.title}
 							onkeydown={(e) => e.key === 'Enter' && submitEvent()}
-							placeholder={fam === 'live' ? 'Add a show — city, venue…' : 'Add a date…'}
+							placeholder="Add a date…"
 							class={addInput}
+						/>
+						<input
+							bind:value={evDraft.location}
+							onkeydown={(e) => e.key === 'Enter' && submitEvent()}
+							placeholder="location"
+							class="{addInput} max-w-[140px]"
 						/>
 						<input
 							type="datetime-local"
@@ -952,7 +988,7 @@
 			{#if p.linked.length}
 				<div class={cardClass}>
 					<div class="{sectionLabel} mb-1.5">LINKED ITEMS</div>
-					{#each p.linked as l (l.title)}
+					{#each p.linked as l, i (i)}
 						{@const cm = LINK_CODE_MAP[l.type] ?? LINK_CODE_MAP.note}
 						<div class="flex items-center gap-3 border-t py-2.5 first:border-t-0">
 							<span
@@ -972,7 +1008,7 @@
 		{#snippet activityC()}
 			<div class={cardClass}>
 				<div class="{sectionLabel} mb-2">ACTIVITY</div>
-				{#each p.activity as a (a.date + a.text)}
+				{#each p.activity as a, i (i)}
 					<div class="flex gap-3 py-[7px]">
 						<span class="w-[50px] flex-none font-mono text-[10px] leading-[1.4] text-muted-foreground"
 							>{fmtISO(a.date)}</span

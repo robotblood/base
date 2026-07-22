@@ -294,12 +294,13 @@ export class Tracker {
 
 	// Project events are real Calendar records (events.project_id) — tour
 	// dates on a live show land as 'performance', everything else as 'event'.
-	async addEvent(pid: string, title: string, when: string) {
+	async addEvent(pid: string, title: string, when: string, location = '') {
 		const p = this.find(pid);
 		if (!p || !title.trim()) return;
 		const row = await persist.eventCreate({
 			title: title.trim(),
 			starts_at: when || null,
+			location: location.trim() || null,
 			kind: kindInfo(p.kind).family === 'live' ? 'performance' : 'event',
 			project_id: Number(pid)
 		});
@@ -434,7 +435,7 @@ export class Tracker {
 	}
 	linkParent(childId: string, parentId?: string) {
 		const c = this.find(childId);
-		if (!c || childId === parentId) return;
+		if (!c || childId === parentId || c.parentId === parentId) return;
 		c.parentId = parentId;
 		void persist.update(childId, { parent_id: parentId ? Number(parentId) : null });
 		const parent = parentId ? this.find(parentId) : undefined;

@@ -31,13 +31,39 @@ export interface ProjNote {
 	body: string;
 	kind: string; // note | meeting | journal
 }
+// The show production doc stored whole in events.show (performances only).
+export interface ShowDoc {
+	advance?: string; // Advanced | Pending | Confirmed
+	doors?: string;
+	set?: string;
+	loadIn?: string;
+	loadOut?: string;
+	capacity?: number;
+	sold?: number;
+	gross?: number; // dollars
+	contactRole?: string;
+	timeline?: { t: string; l: string; done?: boolean; head?: boolean }[];
+	crew?: { name: string; role: string }[];
+	setlist?: string;
+	tickets?: { tier: string; price: string; sold: string }[];
+	guests?: { name: string; type: string }[];
+	guestCount?: string; // e.g. "18 / 25"
+	settlement?: { label: string; value: string }[];
+}
 // A real Calendar event linked to the project (events.project_id).
 export interface ProjEvent {
 	id: string;
 	title: string;
 	when: string; // ISO datetime (may be empty)
 	location: string;
+	address: string;
+	phone: string;
+	email: string;
+	contactId?: string; // People database record
+	notes: string;
 	kind: string; // event | performance | deadline | …
+	status: string; // show pipeline: Announced | Advancing | Confirmed | …
+	show?: ShowDoc;
 }
 export interface ProjFile {
 	name: string;

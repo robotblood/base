@@ -63,7 +63,18 @@ class Event(Base, table=True):
     ends_at: Optional[datetime] = None
     all_day: bool = False
     location: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    # Link to a people.id (loose reference, same convention as project_id).
+    contact_id: Optional[int] = Field(default=None, index=True)
     kind: Optional[str] = Field(default="event", index=True)  # event | performance | deadline
+    # Live-show pipeline: Confirmed | Advancing | Announced | Cancelled | Completed
+    status: Optional[str] = Field(default=None, index=True)
+    # Show production doc (performances only) — advance, times, counts, run of
+    # day, crew, tickets, guests, settlement. Read/written whole, like the
+    # projects JSONB fields.
+    show: Optional[dict] = Field(default=None, sa_type=JSONB)
     notes: Optional[str] = None
     # Link to a projects.id (loose reference, same convention as todos/notes).
     project_id: Optional[int] = Field(default=None, index=True)

@@ -1,6 +1,6 @@
 // Shapes FastAPI rows into the tracker's Project/Task types. Pure and
 // framework-free, shared by the server load and client-side create flow.
-import { STAGES, type Health, type Project, type Rundown, type Task } from './data';
+import { STAGES, type Health, type Project, type Rundown, type ShowDoc, type Task } from './data';
 
 export type Row = Record<string, unknown>;
 
@@ -46,7 +46,14 @@ export function toProjEvent(ev: Row) {
 		title: str(ev.title),
 		when: str(ev.starts_at),
 		location: str(ev.location),
-		kind: str(ev.kind) || 'event'
+		address: str(ev.address),
+		phone: str(ev.phone),
+		email: str(ev.email),
+		contactId: ev.contact_id != null ? String(ev.contact_id) : undefined,
+		notes: str(ev.notes),
+		kind: str(ev.kind) || 'event',
+		status: str(ev.status),
+		show: ev.show && typeof ev.show === 'object' ? (ev.show as ShowDoc) : undefined
 	};
 }
 
