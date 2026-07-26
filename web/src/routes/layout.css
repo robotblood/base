@@ -1,6 +1,16 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+/* The families the admin design page can choose between. All bundled rather
+   than loaded from Google, because the dashboard has to work with no network —
+   a font picker whose fonts only arrive online isn't a font picker. */
 @import '@fontsource-variable/space-grotesk/index.css';
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource-variable/ibm-plex-sans/index.css';
+@import '@fontsource-variable/public-sans/index.css';
+@import '@fontsource-variable/fraunces/index.css';
+@import '@fontsource-variable/source-serif-4/index.css';
+@import '@fontsource-variable/lora/index.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';

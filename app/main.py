@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from fastapi import FastAPI, Query
-from sqlalchemy import and_
 from sqlmodel import Session, func, select
 
 from app import models
 from app.db import engine, init_db
+from app.health import db_health, path_health
 from app.routers import make_crud_router
 
 
@@ -39,9 +39,64 @@ for model, name, title_field in MODULES:
     app.include_router(make_crud_router(model, name, title_field, order_by=order_by, desc=desc))
 
 
+# Modules whose rows point at an on-disk folder, for the admin path check.
+PATH_MODULES = [(m, n, t) for m, n, t in MODULES if hasattr(m, "path")]
+
+
 @app.get("/")
 def root():
     return {"service": "base", "modules": [m[1] for m in MODULES]}
+
+
+@app.get("/health")
+def health():
+    """Database reachability and footprint. Cheap enough to poll."""
+    return {"api": {"ok": True, "version": app.version}, "db": db_health()}
+
+
+@app.get("/health/paths")
+def health_paths():
+    """Rows whose on-disk `path` no longer exists. Hits the filesystem — the
+    admin page loads it on demand rather than with every health poll."""
+    return path_health(PATH_MODULES)
+
+
+@app.get("/settings/{key}")
+def get_setting(key: str):
+    """A stored settings blob, or `{}` when nothing has been saved yet.
+
+    Returning empty rather than 404 keeps callers simple: the design page fills
+    an unset config from its own defaults, so "never saved" and "saved as
+    defaults" behave identically."""
+    with Session(engine) as session:
+        row = session.get(models.Setting, key)
+        return row.value if row else {}
+
+
+@app.put("/settings/{key}")
+def put_setting(key: str, value: dict):
+    """Upsert a settings blob. Stored whole — these are documents, not rows."""
+    with Session(engine) as session:
+        row = session.get(models.Setting, key)
+        if row:
+            row.value = value
+            row.updated_at = models.utcnow()
+        else:
+            row = models.Setting(key=key, value=value)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return row.value
+
+
+@app.delete("/settings/{key}", status_code=204)
+def delete_setting(key: str):
+    """Drop a settings blob so its owner falls back to defaults."""
+    with Session(engine) as session:
+        row = session.get(models.Setting, key)
+        if row:
+            session.delete(row)
+            session.commit()
 
 
 @app.get("/tags")

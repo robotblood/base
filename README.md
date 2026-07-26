@@ -63,6 +63,54 @@ journalctl --user -u base-web -u base-api -f   # logs
 systemctl --user restart base-web              # after a rebuild
 ```
 
+## Admin
+
+`/admin` in the dashboard operates the system rather than holding data. Sections
+are registered in `web/src/lib/admin.ts` — adding one is a single entry.
+
+Because base runs as a long-lived desktop window, a rebuild leaves that window
+holding the previous client bundle — and the nav is built from code baked into
+it, so a page added by the rebuild isn't there to click. `vite.config.ts` polls
+`version.json` every 30s and the layout raises a **"A new build of base is
+ready — Reload"** toast when it changes. If a new page seems missing, that
+window predates it; reload.
+
+**Health** (`/admin/health`) — the four processes base needs alive (`base-api`,
+`base-web`, `base-backup.timer`, the `base-db` container), backup freshness,
+database size and per-table footprint, disk headroom, the thumbnail cache, and
+an on-demand check of every row whose `path` points at a folder on disk.
+
+Host checks live in the *web* server (`web/src/lib/server/host.ts`), not the
+API: a check that reports "base-api is down" can't be served by base-api. The
+API contributes only what it owns — database reachability and footprint
+(`app/health.py`, `GET /health` and `GET /health/paths`).
+
+Broken paths are grouped by the missing directory they share, so an unplugged
+drive reads as one fault ("`/media/robotblood/Main HD` — 71 rows need it")
+rather than 71 unrelated ones.
+
+**Design** (`/admin/design`) — the live design system. You author **seven
+colours per mode** (background, surface, text, muted, border, accent,
+on-accent) plus type, corner radius and density; `web/src/lib/design/tokens.ts`
+derives the ~30 CSS variables the app actually reads (`--card`, `--popover`,
+`--sidebar-*`, `--chart-*`, …) from them, in oklch, so "one step lighter" is
+perceptually one step lighter. Contrast ratios are checked against WCAG as you
+go.
+
+Edits apply to the whole app immediately — the page previews itself, so the
+sidebar and its own chrome move with the specimens. Tokens autosave to the
+`settings` table, which means `pg_dump` already backs them up; `+layout.server.ts`
+renders them into the page so the first paint is themed. Reset drops the row
+and the built-in look returns.
+
+The defaults reproduce base's existing Paper/Console identity exactly, so
+nothing changed the day this shipped. Two things worth knowing:
+
+- shadcn's `--accent` is the subtle *hover* surface, not a brand colour. The
+  accent you pick becomes `--signal`, `--ring` and the chart series.
+- The status colours in `$lib/status.ts` are deliberately **not** tokens. They
+  encode meaning (blocked, overdue, done) and must not invert between themes.
+
 ## Backups
 
 `install-services.sh` also enables **base-backup.timer** — a daily `pg_dump`

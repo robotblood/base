@@ -2,9 +2,10 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import type { Snippet } from 'svelte';
-	import { page } from '$app/state';
+	import { page, updated } from '$app/state';
 	import { MODULES, MODULE_CODES } from '$lib/modules';
 	import { Toaster } from '$lib/components/ui/sonner';
+	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { ModeWatcher, toggleMode } from 'mode-watcher';
 	import type { LayoutData } from './$types';
@@ -16,8 +17,33 @@
 	const stats = $derived(data.stats ?? {});
 	const total = $derived(Object.values(stats).reduce((a, b) => a + b, 0));
 
+	// This runs as a long-lived desktop window, so a rebuild leaves it holding
+	// the previous client bundle — and since the nav is built from code baked
+	// into that bundle, a page added by the rebuild simply isn't there to click.
+	// vite.config.ts already polls version.json; this is the part that says so
+	// out loud instead of leaving you looking at an app that quietly lost a
+	// feature it never knew about.
+	let notified = false;
+	$effect(() => {
+		if (!updated.current || notified) return;
+		notified = true;
+		toast('A new build of base is ready', {
+			description: 'Reload to pick it up — this window is running the previous version.',
+			duration: Number.POSITIVE_INFINITY,
+			action: { label: 'Reload', onClick: () => location.reload() }
+		});
+	});
+
+	type NavItem = {
+		code: string;
+		label: string;
+		href: string;
+		count: number | null;
+		rule?: boolean; // draw a separator above this item
+	};
+
 	const nav = $derived.by(() => {
-		const items = [{ code: '~', label: 'Overview', href: '/', count: null as number | null }];
+		const items: NavItem[] = [{ code: '~', label: 'Overview', href: '/', count: null }];
 		for (const m of MODULES) {
 			// The aggregated calendar and the shows pipeline sit where the events
 			// table lives — they're views over it (plus the other dated tables).
@@ -32,6 +58,9 @@
 				count: stats[m.key] ?? 0
 			});
 		}
+		// Admin sits below the data, ruled off — it operates the system rather
+		// than being part of it.
+		items.push({ code: 'SYS', label: 'Admin', href: '/admin', count: null, rule: true });
 		return items;
 	});
 
@@ -40,7 +69,14 @@
 	}
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" href={favicon} />
+	<!-- Saved design tokens, rendered server-side so the first paint is already
+	     themed (no flash of the built-in palette). Emitted after Tailwind's own
+	     sheet, so these :root / .dark blocks win at equal specificity. The admin
+	     design page overrides this live while you're editing. -->
+	{@html `<style id="base-theme">${data.themeCss ?? ''}</style>`}
+</svelte:head>
 
 <div class="flex min-h-screen bg-background text-foreground">
 	<aside
@@ -63,6 +99,9 @@
 		<nav class="flex flex-1 flex-col gap-px overflow-y-auto py-2 pr-2">
 			{#each nav as item (item.href)}
 				{@const active = isActive(item.href)}
+				{#if item.rule}
+					<div class="my-1.5 ml-3 mr-2 h-px bg-sidebar-border"></div>
+				{/if}
 				<a
 					href={item.href}
 					class={`group flex items-center gap-3 border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ${

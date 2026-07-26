@@ -32,5 +32,9 @@ export const api = {
 	tags: (module?: string) =>
 		req(`/tags${module ? `?module=${encodeURIComponent(module)}` : ''}`) as Promise<string[]>,
 	stats: () => req('/stats') as Promise<Stats>,
-	dashboard: () => req('/dashboard') as Promise<DashboardData>
+	dashboard: () => req('/dashboard') as Promise<DashboardData>,
+	getSetting: (key: string) => req(`/settings/${key}`) as Promise<unknown>,
+	putSetting: (key: string, value: unknown) =>
+		req(`/settings/${key}`, { method: 'PUT', body: JSON.stringify(value) }) as Promise<unknown>,
+	deleteSetting: (key: string) => req(`/settings/${key}`, { method: 'DELETE' }) as Promise<null>
 };

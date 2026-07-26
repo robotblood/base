@@ -166,3 +166,18 @@ class Person(Base, table=True):
     about: Optional[str] = None
     membership_type: Optional[str] = None
     path: Optional[str] = None  # on-disk folder (photos, shared work) for media previews
+
+
+class Setting(SQLModel, table=True):
+    """App configuration that belongs to the system rather than to a module.
+
+    Deliberately not a `Base` subclass: settings have no Notion origin, no tags
+    and no raw snapshot. Keeping them in Postgres rather than a JSON file on
+    disk means `pg_dump` already backs them up — a theme you spent an evening
+    on is restored by the same command that restores your notes.
+    """
+
+    __tablename__ = "settings"
+    key: str = Field(primary_key=True)
+    value: dict = Field(default_factory=dict, sa_type=JSONB)
+    updated_at: datetime = Field(default_factory=utcnow)
