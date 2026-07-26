@@ -30,7 +30,32 @@ export const load: PageServerLoad = async ({ params }) => {
 				)
 			: Promise.resolve(null)
 	]);
-	return { moduleKey: mod.key, item, relationOptions, tagSuggestions, attendeeSuggestions };
+	// Documents written inside this note. The weekly note is a workspace, so
+	// what came out of it belongs on its page (see importer/subpages.py).
+	const children =
+		mod.key === 'notes'
+			? await api
+					.list('notes')
+					.then((rows) =>
+						rows
+							.filter((n) => String(n.parent_id ?? '') === String(item.id))
+							.map((n) => ({
+								id: n.id as number,
+								title: String(n.title ?? ''),
+								chars: String(n.body ?? '').length
+							}))
+							.sort((a, b) => b.chars - a.chars)
+					)
+					.catch(() => [])
+			: [];
+	return {
+		moduleKey: mod.key,
+		item,
+		relationOptions,
+		tagSuggestions,
+		attendeeSuggestions,
+		children
+	};
 };
 
 export const actions: Actions = {

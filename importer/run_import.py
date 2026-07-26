@@ -17,6 +17,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlmodel import Session, select
 
+from app import models
 from app.config import settings
 from app.db import engine, init_db
 from importer import notion as nd
@@ -132,11 +133,29 @@ def main() -> None:
             c, u = import_spec(session, root, spec)
             total_c += c
             total_u += u
+        # Documents written inside a note's page (see importer/subpages.py).
+        # Runs after the rows exist, since each child needs its parent.
+        from importer.subpages import import_subpages
+
+        pages = {"created": 0, "updated": 0, "stubs": 0, "schema": 0, "orphans": 0, "retitled": 0}
+        for spec in specs:
+            if spec.model is not models.Note or not spec.load_bodies:
+                continue
+            got = import_subpages(session, root / spec.csv, spec.source)
+            for k in pages:
+                pages[k] += got[k]
+
         # Refresh the derived calendar from the (re)imported notes.
         from importer.derive import derive_events
 
         events = derive_events(session)
     print(f"\nDone. Created {total_c}, updated {total_u} across {len(specs)} databases.")
+    if any(pages.values()):
+        print(
+            f"Nested pages: +{pages['created']} ~{pages['updated']} documents "
+            f"(skipped {pages['schema']} schema dumps, {pages['stubs']} stubs, "
+            f"{pages['orphans']} with no parent row)."
+        )
     print(f"Calendar: derived {events} events from notes.")
 
 

@@ -54,6 +54,11 @@ class Note(Base, table=True):
     meeting_type: Optional[str] = None
     attendees: list[str] = Field(default_factory=list, sa_type=ARRAY(String))
     meeting_time: Optional[datetime] = Field(default=None, index=True)
+    # A document written inside another note. The weekly note is a workspace;
+    # anything that became a deliverable got its own page within it, and those
+    # pages come in as children (loose reference to notes.id, same convention
+    # as project_id).
+    parent_id: Optional[int] = Field(default=None, index=True)
 
 
 class Event(Base, table=True):

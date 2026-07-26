@@ -67,6 +67,7 @@ export const MODULES: ModuleConfig[] = [
 			{ header: 'Status', field: 'status', render: 'badge' },
 			{ header: 'Type', field: 'meeting_type' },
 			{ header: 'Project', field: 'project_id_label', hidden: true },
+			{ header: 'Part of', field: 'parent_id_label', hidden: true },
 			{ header: 'Tags', field: 'tags', render: 'tags', hidden: true }
 		],
 		fields: [
@@ -80,6 +81,9 @@ export const MODULES: ModuleConfig[] = [
 				options: ['note', 'meeting', 'daily', 'weekly', 'journal']
 			},
 			{ name: 'project_id', label: 'Project', type: 'relation', ref: 'projects' },
+			// A document written inside another note — the weekly note is a
+			// workspace, and its deliverables live under it.
+			{ name: 'parent_id', label: 'Part of', type: 'relation', ref: 'notes' },
 			{
 				name: 'meeting_type',
 				label: 'Meeting type',

@@ -173,7 +173,16 @@
 	// Notes get a header strip: the fields you actually reach for (status high
 	// on the page), with meeting type only shown for meetings. kindLive tracks
 	// the select as it's edited so the strip reshapes immediately.
-	const STRIP_FIELDS = ['kind', 'meeting_type', 'status', 'meeting_time', 'project_id'];
+	// `parent_id` joins them so a document written inside a weekly note says so,
+	// and can be re-filed, without digging into the full field list below.
+	const STRIP_FIELDS = [
+		'kind',
+		'meeting_type',
+		'status',
+		'meeting_time',
+		'project_id',
+		'parent_id'
+	];
 	let kindLive = $state('');
 	$effect(() => {
 		item.id;
@@ -526,6 +535,33 @@
 					layout="row"
 				/>
 			{/key}
+		</section>
+	{/if}
+
+	<!-- What came out of this note: pages written inside it. -->
+	{#if data.children?.length}
+		<section class="max-w-5xl overflow-hidden rounded-[12px] border bg-card">
+			<div class="flex items-center justify-between border-b px-6 py-3">
+				<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+					Pages in this note
+				</span>
+				<span class="font-mono text-[11px] tabular-nums text-muted-foreground">
+					{data.children.length}
+				</span>
+			</div>
+			<div class="divide-y">
+				{#each data.children as c (c.id)}
+					<a
+						href={`/notes/${c.id}`}
+						class="flex items-center justify-between gap-3 px-6 py-2.5 transition-colors hover:bg-accent"
+					>
+						<span class="min-w-0 truncate text-sm">{c.title}</span>
+						<span class="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+							{c.chars >= 1000 ? `${Math.round(c.chars / 1000)}k` : c.chars} chars
+						</span>
+					</a>
+				{/each}
+			</div>
 		</section>
 	{/if}
 
