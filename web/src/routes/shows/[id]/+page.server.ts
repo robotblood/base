@@ -37,5 +37,20 @@ export const load: PageServerLoad = async ({ params }) => {
 				.sort((a, b) => a.name.localeCompare(b.name))
 		)
 		.catch(() => []);
-	return { ev, project, siblings, contact, directory };
+	// Merch catalog for the count sheet's suggestions. Empty is the normal
+	// starting state — counting a first show is how the catalog gets filled.
+	const catalog = await api
+		.list('merch')
+		.then((rows) =>
+			rows
+				.map((r) => ({
+					id: r.id as number,
+					name: String(r.name ?? ''),
+					price: Number(r.price ?? 0),
+					stock: r.stock == null ? null : Number(r.stock)
+				}))
+				.sort((a, b) => a.name.localeCompare(b.name))
+		)
+		.catch(() => []);
+	return { ev, project, siblings, contact, directory, catalog };
 };

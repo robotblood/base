@@ -48,7 +48,32 @@ export interface ShowDoc {
 	tickets?: { tier: string; price: string; sold: string }[];
 	guests?: { name: string; type: string }[];
 	guestCount?: string; // e.g. "18 / 25"
+	// Free-form settlement lines from before terms were modelled. Still
+	// rendered when `deal` is unset, so older shows keep what was typed.
 	settlement?: { label: string; value: string }[];
+	deal?: Deal;
+	merch?: MerchCount[];
+	// ISO stamp written when sold counts were pushed into merch.stock, so the
+	// same show can't be applied to inventory twice.
+	merchApplied?: string;
+}
+// Deal terms — enough to settle a normal club/theatre show. The artist takes
+// whichever is larger: the guarantee, or `split`% of net after expenses.
+export interface Deal {
+	guarantee?: number; // dollars
+	split?: number; // percent of net box office, 0–100
+	expenses?: { label: string; amount: number }[];
+	merchRate?: number; // percent of merch gross the venue keeps, 0–100
+}
+// One merch line for one show. `out` is the count at the end of the night, so
+// sold = in - out - comp and the sheet reconciles against physical stock.
+export interface MerchCount {
+	itemId?: number; // merch table record, when the line came from the catalog
+	name: string;
+	price: number;
+	in: number;
+	out?: number;
+	comp?: number;
 }
 // A real Calendar event linked to the project (events.project_id).
 export interface ProjEvent {

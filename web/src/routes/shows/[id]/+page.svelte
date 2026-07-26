@@ -6,6 +6,7 @@
 	// input. Pills cycle on click; every change persists through the PATCH
 	// relay immediately.
 	import { toast } from 'svelte-sonner';
+	import { invalidateAll } from '$app/navigation';
 	import type { PageProps } from './$types';
 	import { toProjEvent } from '$lib/projects/map';
 	import type { ShowDoc } from '$lib/projects/data';
@@ -13,6 +14,11 @@
 		ADVANCE_STYLE,
 		SHOW_STATUS,
 		fmtMoney,
+		hasDeal,
+		merchCounted,
+		merchRevenue,
+		merchSold,
+		settle,
 		settlementTone,
 		showDateLong,
 		showStatus
@@ -122,6 +128,94 @@
 			.join('')
 			.slice(0, 3)
 			.toUpperCase();
+
+	// ——— Merch count ————————————————————————————————————————————————
+	// The sheet you actually fill in at the merch table: what you put out, what
+	// came back, what you gave away. Sold and revenue are computed from those,
+	// so the numbers always reconcile against the physical count.
+	const merch = $derived(doc.merch ?? []);
+	const merchTotals = $derived(
+		merch.reduce(
+			(acc, m) => {
+				acc.in += m.in ?? 0;
+				acc.sold += merchSold(m);
+				acc.revenue += merchRevenue(m);
+				return acc;
+			},
+			{ in: 0, sold: 0, revenue: 0 }
+		)
+	);
+	const countedOut = $derived(merchCounted(doc.merch));
+
+	function addMerchLine() {
+		(doc.merch ??= []).push({ name: '', price: 0, in: 0 });
+		void saveDoc();
+	}
+	// Typing a catalog name links the line to that record and pulls its price,
+	// so counts drawn from stock find their way back to the right item.
+	function nameMerchLine(i: number, value: string) {
+		const name = value.trim();
+		const hit = data.catalog.find((c) => c.name.toLowerCase() === name.toLowerCase());
+		const line = doc.merch![i];
+		line.name = name;
+		line.itemId = hit?.id;
+		if (hit && !line.price) line.price = hit.price;
+		void saveDoc();
+	}
+
+	let applying = $state(false);
+	async function applyMerch() {
+		applying = true;
+		try {
+			const res = await fetch(`/shows/${ev.id}`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ action: 'apply-merch' })
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.reason ?? `${res.status}`);
+			doc.merchApplied = body.appliedAt;
+			const bits = [
+				body.drawnDown ? `${body.drawnDown} sold drawn from stock` : '',
+				body.created ? `${body.created} new item${body.created === 1 ? '' : 's'} in the catalog` : ''
+			].filter(Boolean);
+			toast.success('Merch applied to inventory', { description: bits.join(' · ') });
+			// Catalog stock and new records changed underneath us.
+			void invalidateAll();
+		} catch (e) {
+			toast.error('Could not apply merch to inventory', { description: String(e) });
+		} finally {
+			applying = false;
+		}
+	}
+
+	// ——— Settlement ————————————————————————————————————————————————
+	const money = $derived(settle(doc));
+	const dealSet = $derived(hasDeal(doc));
+	// Editing any term is what converts a show from the old typed list to the
+	// computed sheet; `deal` existing at all is the switch.
+	function setDeal(patchDeal: Partial<NonNullable<ShowDoc['deal']>>) {
+		doc.deal = { ...(doc.deal ?? {}), ...patchDeal };
+		void saveDoc();
+	}
+	const dealRows = $derived([
+		{ label: 'Box office', value: fmtMoney(money.gross) },
+		...(money.expenses ? [{ label: 'Expenses', value: `−${fmtMoney(money.expenses)}` }] : []),
+		{ label: 'Net', value: fmtMoney(money.net) },
+		{ label: 'Guarantee', value: fmtMoney(money.guarantee) },
+		...(money.splitPct
+			? [{ label: `vs. ${money.splitPct}% net`, value: fmtMoney(money.splitEarn) }]
+			: []),
+		...(money.merchGross
+			? [
+					{ label: 'Merch', value: fmtMoney(money.merchGross) },
+					...(money.merchToVenue
+						? [{ label: `Venue merch cut`, value: `−${fmtMoney(money.merchToVenue)}` }]
+						: [])
+				]
+			: []),
+		{ label: 'Projected payout', value: fmtMoney(money.payout) }
+	]);
 
 	const railCard = 'rounded-[12px] border bg-background/60 p-4';
 	const railLabel = 'font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground';
@@ -577,6 +671,146 @@
 							</div>
 						{/if}
 					</div>
+
+					<!-- Merch count sheet. Always editable (you fill it in at the table
+					     mid-show, not in "edit show" mode). IN/OUT/COMP are typed;
+					     SOLD and revenue are derived so the sheet reconciles. -->
+					<div>
+						<div class="{sectionLabel} mb-3 flex items-center justify-between">
+							<span>Merch Count</span>
+							<span class="flex items-center gap-3">
+								{#if merchTotals.sold}
+									<span class="font-mono text-[11px] normal-case tracking-normal text-foreground/70">
+										{merchTotals.sold} sold · {fmtMoney(merchTotals.revenue)}
+									</span>
+								{/if}
+								<button onclick={addMerchLine} class={ghostBtn}>+ Add</button>
+							</span>
+						</div>
+
+						{#if merch.length}
+							<div class="overflow-hidden rounded-[10px] border bg-background/60">
+								<div
+									class="grid grid-cols-[1fr_58px_46px_46px_46px_74px_20px] items-center gap-2 border-b px-3 py-2 font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground/70"
+								>
+									<span>Item</span>
+									<span class="text-right">Price</span>
+									<span class="text-right">In</span>
+									<span class="text-right">Out</span>
+									<span class="text-right">Comp</span>
+									<span class="text-right">Sold</span>
+									<span></span>
+								</div>
+								{#each merch as m, i (i)}
+									<div
+										class="group/mc grid grid-cols-[1fr_58px_46px_46px_46px_74px_20px] items-center gap-2 border-b px-3 py-[7px] text-[13px] last:border-b-0"
+									>
+										<input
+											value={m.name}
+											placeholder="Item name…"
+											list="merch-catalog"
+											onchange={(e) => nameMerchLine(i, e.currentTarget.value)}
+											aria-label="Merch item"
+											class="{ghost} min-w-0"
+										/>
+										<input
+											value={m.price || ''}
+											inputmode="decimal"
+											placeholder="0"
+											onchange={(e) => {
+												doc.merch![i].price = Number(e.currentTarget.value.replace(/[^0-9.]/g, '')) || 0;
+												void saveDoc();
+											}}
+											aria-label="Price"
+											class="{ghost} min-w-0 text-right font-mono text-[12px]"
+										/>
+										<input
+											value={m.in || ''}
+											inputmode="numeric"
+											placeholder="0"
+											onchange={(e) => {
+												doc.merch![i].in = num(e.currentTarget.value) ?? 0;
+												void saveDoc();
+											}}
+											aria-label="Count in"
+											class="{ghost} min-w-0 text-right font-mono text-[12px]"
+										/>
+										<input
+											value={m.out ?? ''}
+											inputmode="numeric"
+											placeholder="—"
+											onchange={(e) => {
+												const v = e.currentTarget.value.trim();
+												doc.merch![i].out = v === '' ? undefined : (num(v) ?? 0);
+												void saveDoc();
+											}}
+											aria-label="Count out"
+											class="{ghost} min-w-0 text-right font-mono text-[12px]"
+										/>
+										<input
+											value={m.comp ?? ''}
+											inputmode="numeric"
+											placeholder="—"
+											onchange={(e) => {
+												const v = e.currentTarget.value.trim();
+												doc.merch![i].comp = v === '' ? undefined : (num(v) ?? 0);
+												void saveDoc();
+											}}
+											aria-label="Comped"
+											class="{ghost} min-w-0 text-right font-mono text-[12px]"
+										/>
+										<span class="text-right font-mono text-[12px]">
+											{#if m.out == null}
+												<span class="text-muted-foreground/60">uncounted</span>
+											{:else}
+												<span class="text-foreground/80">{merchSold(m)}</span>
+												<span class="ml-1 text-muted-foreground/70">{fmtMoney(merchRevenue(m))}</span>
+											{/if}
+										</span>
+										<button
+											onclick={() => {
+												doc.merch!.splice(i, 1);
+												void saveDoc();
+											}}
+											title="Remove line"
+											class="{rowX} group-hover/mc:block"><X class="size-3.5" /></button
+										>
+									</div>
+								{/each}
+							</div>
+							<datalist id="merch-catalog">
+								{#each data.catalog as c (c.id)}<option value={c.name}></option>{/each}
+							</datalist>
+
+							<div class="mt-2.5 flex items-center gap-2 font-mono text-[11px]">
+								{#if doc.merchApplied}
+									<span class="text-muted-foreground">
+										Applied to inventory {doc.merchApplied.slice(0, 10)}
+									</span>
+								{:else if countedOut}
+									<button
+										onclick={applyMerch}
+										disabled={applying}
+										class="rounded-[6px] border px-2.5 py-1 uppercase tracking-[0.06em] text-signal hover:bg-accent disabled:opacity-50"
+									>
+										{applying ? 'Applying…' : 'Apply to inventory'}
+									</button>
+									<span class="text-muted-foreground">
+										draws {merchTotals.sold} from stock; unlisted items join the catalog
+									</span>
+								{:else}
+									<span class="text-muted-foreground">
+										Fill in OUT for every line to settle the count.
+									</span>
+								{/if}
+							</div>
+						{:else}
+							<div class="text-[13px] text-muted-foreground">
+								No merch counted — add what goes out to the table and count it back in at the end
+								of the night.
+							</div>
+						{/if}
+					</div>
 				</div>
 
 				<!-- Right rail -->
@@ -828,7 +1062,114 @@
 						</div>
 					{/if}
 
-					{#if doc.settlement?.length || editMode}
+					<!-- Settlement. Once deal terms exist the sheet is computed from them
+					     (box office → expenses → net → the better of guarantee/split,
+					     plus merch); until then it renders whatever was typed into the
+					     older free-form list, so nothing already entered is lost. -->
+					{#if dealSet}
+						<div class={railCard}>
+							<div class="mb-3 flex items-center justify-between">
+								<span class={railLabel}>Settlement</span>
+								{#if money.overage}
+									<span class="font-mono text-[10px] uppercase tracking-[0.06em] text-[#63c088]">
+										+{fmtMoney(money.overage)} over
+									</span>
+								{/if}
+							</div>
+
+							{#if editMode}
+								<div class="mb-3 flex flex-col gap-2 border-b pb-3">
+									{#snippet term(label: string, value: number | undefined, suffix: string, set: (n: number | undefined) => void)}
+										<div class="flex items-center justify-between gap-2">
+											<span class="text-[13px] text-muted-foreground">{label}</span>
+											<span class="flex items-center gap-1 font-mono text-[13px]">
+												<input
+													value={value ?? ''}
+													inputmode="decimal"
+													placeholder="0"
+													onchange={(e) => set(num(e.currentTarget.value))}
+													aria-label={label}
+													class="{ghost} w-[62px] text-right"
+												/>
+												<span class="text-muted-foreground/70">{suffix}</span>
+											</span>
+										</div>
+									{/snippet}
+									{@render term('Guarantee', doc.deal?.guarantee, '$', (n) =>
+										setDeal({ guarantee: n })
+									)}
+									{@render term('Split of net', doc.deal?.split, '%', (n) => setDeal({ split: n }))}
+									{@render term('Venue merch cut', doc.deal?.merchRate, '%', (n) =>
+										setDeal({ merchRate: n })
+									)}
+
+									<div class="mt-1 flex items-center justify-between">
+										<span class={railLabel}>Expenses</span>
+										<button
+											onclick={() => {
+												const deal = (doc.deal ??= {});
+												(deal.expenses ??= []).push({ label: 'Expense', amount: 0 });
+												void saveDoc();
+											}}
+											class={ghostBtn}>+ Add</button
+										>
+									</div>
+									{#each doc.deal?.expenses ?? [] as x, i (i)}
+										<div class="group/ex flex items-center justify-between gap-2">
+											<input
+												value={x.label}
+												onchange={(e) => {
+													doc.deal!.expenses![i].label = e.currentTarget.value.trim();
+													void saveDoc();
+												}}
+												aria-label="Expense name"
+												class="{ghost} min-w-0 flex-1 text-[13px] text-muted-foreground"
+											/>
+											<span class="flex items-center gap-1.5">
+												<input
+													value={x.amount || ''}
+													inputmode="decimal"
+													placeholder="0"
+													onchange={(e) => {
+														doc.deal!.expenses![i].amount = num(e.currentTarget.value) ?? 0;
+														void saveDoc();
+													}}
+													aria-label="Expense amount"
+													class="{ghost} w-[70px] text-right font-mono text-[13px]"
+												/>
+												<button
+													onclick={() => {
+														doc.deal!.expenses!.splice(i, 1);
+														void saveDoc();
+													}}
+													title="Remove expense"
+													class="{rowX} group-hover/ex:block"><X class="size-3.5" /></button
+												>
+											</span>
+										</div>
+									{/each}
+								</div>
+							{/if}
+
+							{#each dealRows as r (r.label)}
+								{@const tone = settlementTone(r.label)}
+								<div
+									class="flex items-center justify-between gap-2 py-1.5 {r.label === 'Projected payout'
+										? 'mt-1 border-t pt-2.5'
+										: ''}"
+								>
+									<span class="text-[13px] text-muted-foreground">{r.label}</span>
+									<span
+										class="font-mono text-[13px] {tone === 'good'
+											? 'text-[#63c088]'
+											: tone === 'accent'
+												? 'text-signal'
+												: ''}">{r.value}</span
+									>
+								</div>
+							{/each}
+						</div>
+					{:else if doc.settlement?.length || editMode}
 						<div class={railCard}>
 							<div class="mb-3 flex items-center justify-between">
 								<span class={railLabel}>Settlement</span>
@@ -842,6 +1183,13 @@
 									>
 								{/if}
 							</div>
+							{#if editMode}
+								<button
+									onclick={() => setDeal({ guarantee: 0 })}
+									class="mb-2 w-full rounded-[6px] border py-1.5 font-mono text-[10px] uppercase tracking-[0.06em] text-signal hover:bg-accent"
+									>Set up deal terms</button
+								>
+							{/if}
 							{#each doc.settlement ?? [] as r, i (i)}
 								{@const tone = settlementTone(r.label)}
 								<div class="group/st flex items-center justify-between gap-2 py-1.5">
