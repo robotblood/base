@@ -111,6 +111,22 @@ SECTIONS: list[SectionSpec] = [
         subjects=True,
         skip=("Teamspace Home",),
     ),
+    SectionSpec(
+        source="EIPA - Drafts",
+        path="EIPA - Drafts",
+        name="EIPA — Admin Backend v2",
+        kind="rebuild",
+        description=(
+            "Version 2 database architecture for EIPA: the design meant to "
+            "replace the FileMaker system. Data map, table definitions "
+            "(EIPA_RATINGS, EIPA_SUBJECTS, EIPA_ROSTER), the relationships "
+            "between them, and sample rating sessions."
+        ),
+        # A record of work done, not work in flight — archived on arrival so it
+        # stays off the board and the home screen.
+        status="Archive",
+        tags=("EIPA", "design"),
+    ),
 ]
 
 

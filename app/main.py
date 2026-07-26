@@ -212,7 +212,10 @@ def _brief(obj, fields: tuple[str, ...]) -> dict:
 
 
 # Project statuses that mean "not a live thread any more".
-_PROJECT_CLOSED = ["done", "archived", "complete", "completed", "cancelled"]
+# Both spellings on purpose: the tracker's Archive stage writes "Archive",
+# while the archive import wrote "archived". Comparison is lower-cased, so
+# missing one would leave archived projects reading as live threads.
+_PROJECT_CLOSED = ["done", "archive", "archived", "complete", "completed", "cancelled"]
 # The same idea for todos — mirrors `doneValues` for todos in
 # web/src/lib/modules.ts, so the counts here match what the list shows.
 # Archived is work that closed out without being finished.
