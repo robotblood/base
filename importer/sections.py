@@ -24,7 +24,7 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from app.models import Note, Project
-from importer.subpages import body_text, clean_name, derive_title, is_stub
+from importer.subpages import body_text, clean_name, derive_title
 
 _HASH_ONLY = re.compile(r"\s+([0-9a-f]{32})$")
 
@@ -61,6 +61,17 @@ class SectionSpec:
     description: str = ""
     status: str = "Not Started"
     tags: tuple[str, ...] = ()
+    # Give each top-level page its own child project, with the pages beneath it
+    # attached there. For a section that is several separate efforts — a study
+    # space holding four courses — one status for the lot says nothing useful.
+    subjects: bool = False
+    # Pages that are just the section's own index, not content.
+    skip: tuple[str, ...] = ()
+    # How much writing a page needs to be worth keeping. Sections default to
+    # "anything at all": in a study space a page titled "Oxalates" holding one
+    # line is a seed, not noise — the intent is the point. (The nested-note
+    # importer uses a real floor because there it's filtering tool output.)
+    min_body: int = 1
 
 
 SECTIONS: list[SectionSpec] = [
@@ -86,6 +97,20 @@ SECTIONS: list[SectionSpec] = [
         ),
         tags=("website", "reference"),
     ),
+    SectionSpec(
+        source="Continuing Education",
+        path="Continuing Education",
+        name="Continuing Education",
+        kind="project",
+        description=(
+            "Ongoing study. Each subject is its own sub-project so progress is "
+            "tracked per course rather than as one undifferentiated pile."
+        ),
+        status="In Progress",
+        tags=("learning",),
+        subjects=True,
+        skip=("Teamspace Home",),
+    ),
 ]
 
 
@@ -98,38 +123,87 @@ def _content_dir(root: Path) -> Path:
     return root
 
 
+def _upsert_project(
+    session: Session, source: str, name: str, **fields
+) -> tuple[Project, str]:
+    project = session.exec(
+        select(Project).where(Project.source == source, Project.name == name)
+    ).first()
+    verb = "updated"
+    if project is None:
+        project = Project(name=name, source=source)
+        verb = "created"
+    for k, v in fields.items():
+        # Status is only seeded, never reset — it's yours once the project exists.
+        if k == "status" and project.status:
+            continue
+        setattr(project, k, v)
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return project, verb
+
+
 def import_section(session: Session, export_root: Path, spec: SectionSpec) -> dict:
-    stats = {"pages": 0, "created": 0, "updated": 0, "skipped": 0, "project": ""}
+    stats = {"pages": 0, "created": 0, "updated": 0, "skipped": 0, "project": "", "subjects": 0}
     root = export_root / spec.path
     if not root.is_dir():
         print(f"  ! MISSING  {spec.source}: {root}")
         return stats
     content = _content_dir(root)
 
-    project = session.exec(
-        select(Project).where(Project.source == spec.source, Project.name == spec.name)
-    ).first()
-    if project is None:
-        project = Project(name=spec.name, source=spec.source)
-        stats["project"] = "created"
-    else:
-        stats["project"] = "updated"
-    project.kind = spec.kind
-    project.description = spec.description
-    project.status = project.status or spec.status
-    project.tags = list(spec.tags)
-    # Real folder on disk: the FILES card previews the section's assets.
-    project.path = str(content)
-    session.add(project)
-    session.commit()
-    session.refresh(project)
+    project, stats["project"] = _upsert_project(
+        session,
+        spec.source,
+        spec.name,
+        kind=spec.kind,
+        description=spec.description,
+        status=spec.status,
+        tags=list(spec.tags),
+        # Real folder on disk: the FILES card previews the section's assets.
+        path=str(content),
+    )
 
+    # With `subjects`, each top-level page becomes a child project and owns
+    # everything filed beneath it; the folder name is what ties a page to its
+    # subject, since that's how Notion nests them.
+    subject_of: dict[str, Project] = {}
+    if spec.subjects:
+        for md in sorted(content.glob("*.md")):
+            name = clean_name(md.stem)
+            if name in spec.skip:
+                continue
+            # Notion names the child folder after the page but drops the page
+            # id from it: "BTNRH eeae0bc0….md" holds its children in "BTNRH/".
+            folder = content / name
+            if not folder.is_dir():
+                folder = content / md.stem
+            if not folder.is_dir():
+                continue
+            child, _ = _upsert_project(
+                session,
+                spec.source,
+                name,
+                kind=spec.kind,
+                parent_id=project.id,
+                status=spec.status,
+                tags=list(spec.tags),
+                path=str(folder),
+            )
+            subject_of[name] = child
+            subject_of[md.stem] = child
+            stats["subjects"] += 1
+
+    placed: list[tuple[Path, Note]] = []
     for md in sorted(content.rglob("*.md")):
+        if clean_name(md.stem) in spec.skip:
+            stats["skipped"] += 1
+            continue
         try:
             text = md.read_text(encoding="utf-8")
         except OSError:
             continue
-        if is_stub(text):
+        if len(body_text(text)) < spec.min_body:
             stats["skipped"] += 1
             continue
         title = clean_name(md.stem) or derive_title(text, md.stem)
@@ -144,12 +218,20 @@ def import_section(session: Session, export_root: Path, spec: SectionSpec) -> di
             if notion_id
             else None
         )
+        # The first path segment under the section names the subject folder.
+        rel = md.relative_to(content).parts
+        owner = subject_of.get(rel[0]) if len(rel) > 1 else None
+        # A top-level subject page belongs to its own project, not the parent.
+        if owner is None and spec.subjects and len(rel) == 1:
+            owner = subject_of.get(clean_name(md.stem))
+        owner = owner or project
+
         fields = {
             "title": title,
-            "body": link_assets(text, project.id),
+            "body": link_assets(text, owner.id),
             "kind": "note",
             "notion_id": notion_id,
-            "project_id": project.id,
+            "project_id": owner.id,
             "source": source,
             "raw": {"path": str(md.relative_to(export_root))},
             "tags": list(spec.tags),
@@ -157,17 +239,37 @@ def import_section(session: Session, export_root: Path, spec: SectionSpec) -> di
         if existing:
             for k, v in fields.items():
                 setattr(existing, k, v)
-            session.add(existing)
+            note = existing
             stats["updated"] += 1
         else:
-            session.add(Note(**fields))
+            note = Note(**fields)
             stats["created"] += 1
+        session.add(note)
+        placed.append((md, note))
         stats["pages"] += 1
 
     session.commit()
+
+    # Nest pages under the page they were filed inside. Notion puts a page's
+    # children in a folder named after it, so the folder a page sits in names
+    # its parent — that's how Potpourri's topics hang off Potpourri rather than
+    # landing flat beside the lectures. Done in a second pass because a child
+    # can be walked before its parent exists.
+    owner_of_dir = {
+        str((md.parent / clean_name(md.stem)).relative_to(content)): note
+        for md, note in placed
+    }
+    for md, note in placed:
+        key = str(md.parent.relative_to(content))
+        parent = owner_of_dir.get(key)
+        if parent is not None and parent.id != note.id:
+            note.parent_id = parent.id
+            session.add(note)
+    session.commit()
     print(
         f"  ✓ {spec.source:24s} project {stats['project']:8s} "
-        f"pages +{stats['created']} ~{stats['updated']}"
+        + (f"{stats['subjects']} subjects  " if stats["subjects"] else "")
+        + f"pages +{stats['created']} ~{stats['updated']}"
         + (f" ({stats['skipped']} empty)" if stats["skipped"] else "")
     )
     return stats
