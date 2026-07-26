@@ -407,6 +407,198 @@ export const MODULES: ModuleConfig[] = [
 		views: ['table', 'group'],
 		groupFields: ['membership_type', 'tags'],
 		defaultSort: { field: 'name', dir: 'asc' }
+	},
+	{
+		key: 'applications',
+		label: 'Applications',
+		singular: 'application',
+		titleField: 'role',
+		columns: [
+			{ header: 'Role', field: 'role' },
+			{ header: 'Company', field: 'company' },
+			{ header: 'Status', field: 'status', render: 'badge' },
+			{ header: 'Follow up', field: 'follow_up' },
+			{ header: 'Applied', field: 'applied', hidden: true },
+			{ header: 'Location', field: 'location', hidden: true },
+			{ header: 'Salary', field: 'salary_range', hidden: true },
+			{ header: 'Next action', field: 'next_action', hidden: true }
+		],
+		fields: [
+			{ name: 'role', label: 'Role', type: 'text', required: true },
+			{ name: 'company', label: 'Company', type: 'text' },
+			{
+				name: 'status',
+				label: 'Status',
+				type: 'select',
+				options: ['To Apply', 'Researching', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Closed']
+			},
+			{ name: 'priority', label: 'Priority', type: 'text' },
+			{ name: 'location', label: 'Location', type: 'text' },
+			{ name: 'contact', label: 'Contact', type: 'text' },
+			{ name: 'applied', label: 'Date applied', type: 'date' },
+			{ name: 'follow_up', label: 'Follow up', type: 'date' },
+			{ name: 'posting_url', label: 'Job posting', type: 'text' },
+			{ name: 'salary_range', label: 'Salary range', type: 'text' },
+			{ name: 'resume_version', label: 'Resume version', type: 'text' },
+			{ name: 'found_via', label: 'Found via', type: 'text' },
+			{ name: 'track', label: 'Track', type: 'text' },
+			{ name: 'next_action', label: 'Next action', type: 'text' },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'board', 'group', 'calendar'],
+		groupFields: ['status', 'company', 'priority', 'tags'],
+		// A follow-up you've passed is a real deadline; the date you applied is
+		// just history, so only the former can read as overdue.
+		dateField: 'follow_up',
+		overdueField: 'follow_up',
+		statusField: 'status',
+		doneValues: ['Offer', 'Rejected', 'Closed'],
+		statusColors: {
+			'To Apply': STATE.idle,
+			Researching: STATE.progress,
+			Applied: STATE.good,
+			Interviewing: STATE.progress,
+			Offer: STATE.done,
+			Rejected: STATE.muted,
+			Closed: STATE.muted
+		},
+		defaultSort: { field: 'follow_up', dir: 'asc' }
+	},
+	{
+		key: 'transactions',
+		label: 'Transactions',
+		singular: 'transaction',
+		titleField: 'name',
+		columns: [
+			{ header: 'Name', field: 'name' },
+			{ header: 'Amount', field: 'amount' },
+			{ header: 'Date', field: 'occurred_on' },
+			{ header: 'Type', field: 'kind', render: 'badge' },
+			{ header: 'Category', field: 'category', hidden: true }
+		],
+		fields: [
+			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{ name: 'amount', label: 'Amount', type: 'number' },
+			{ name: 'occurred_on', label: 'Date', type: 'date' },
+			{
+				name: 'kind',
+				label: 'Type',
+				type: 'select',
+				// Amounts are stored positive; direction lives here.
+				options: ['income', 'expense']
+			},
+			{ name: 'category', label: 'Category', type: 'text' },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'group', 'calendar'],
+		groupFields: ['kind', 'category', 'tags'],
+		dateField: 'occurred_on',
+		statusField: 'kind',
+		statusColors: { income: STATE.good, expense: STATE.attention },
+		defaultSort: { field: 'occurred_on', dir: 'desc' }
+	},
+	{
+		key: 'budgets',
+		label: 'Budgets',
+		singular: 'budget',
+		titleField: 'name',
+		columns: [
+			{ header: 'Name', field: 'name' },
+			{ header: 'Amount', field: 'amount' },
+			{ header: 'Every', field: 'frequency', render: 'badge' },
+			{ header: 'Last paid', field: 'last_paid' },
+			{ header: 'Starts', field: 'starts_on', hidden: true },
+			{ header: 'Ends', field: 'ends_on', hidden: true }
+		],
+		fields: [
+			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{ name: 'amount', label: 'Amount', type: 'number' },
+			{
+				name: 'frequency',
+				label: 'Frequency',
+				type: 'select',
+				options: ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'One-off']
+			},
+			{ name: 'starts_on', label: 'Starts', type: 'date' },
+			{ name: 'ends_on', label: 'Ends', type: 'date' },
+			{ name: 'last_paid', label: 'Last paid', type: 'date' },
+			{ name: 'paid', label: 'Paid', type: 'checkbox' },
+			{ name: 'category', label: 'Category', type: 'text' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'group'],
+		groupFields: ['frequency', 'category', 'tags'],
+		statusField: 'frequency',
+		statusColors: {
+			Weekly: STATE.progress,
+			Monthly: STATE.good,
+			Quarterly: STATE.done,
+			Yearly: STATE.idle,
+			'One-off': STATE.muted
+		},
+		defaultSort: { field: 'name', dir: 'asc' }
+	},
+	{
+		key: 'learning',
+		label: 'Learning',
+		singular: 'entry',
+		titleField: 'name',
+		columns: [
+			{ header: 'Name', field: 'name' },
+			{ header: 'Status', field: 'status', render: 'badge' },
+			{ header: 'Tags', field: 'tags', render: 'tags' },
+			{ header: 'URL', field: 'url', hidden: true }
+		],
+		fields: [
+			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{
+				name: 'status',
+				label: 'Status',
+				type: 'select',
+				options: ['Not started', 'In progress', 'Done']
+			},
+			{ name: 'url', label: 'URL', type: 'text' },
+			{ name: 'via', label: 'Found via', type: 'text' },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'board', 'group'],
+		groupFields: ['status', 'tags'],
+		statusField: 'status',
+		doneValues: ['Done'],
+		statusColors: {
+			'Not started': STATE.idle,
+			'In progress': STATE.progress,
+			Done: STATE.done
+		},
+		defaultSort: { field: 'name', dir: 'asc' }
+	},
+	{
+		key: 'collections',
+		label: 'Collections',
+		singular: 'entry',
+		titleField: 'title',
+		// Imported Notion databases that aren't modelled yet — kept whole, with
+		// every original column preserved in `raw`. Hidden from the sidebar so
+		// they don't compete with live work; reachable from /admin until one
+		// earns a module of its own.
+		hidden: true,
+		columns: [
+			{ header: 'Title', field: 'title' },
+			{ header: 'Collection', field: 'collection', render: 'badge' },
+			{ header: 'Summary', field: 'summary' }
+		],
+		fields: [
+			{ name: 'title', label: 'Title', type: 'text', required: true },
+			{ name: 'collection', label: 'Collection', type: 'text' },
+			{ name: 'summary', label: 'Summary', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'group'],
+		groupFields: ['collection', 'tags'],
+		defaultSort: { field: 'title', dir: 'asc' }
 	}
 ];
 
@@ -424,5 +616,10 @@ export const MODULE_CODES: Record<string, string> = {
 	projects: 'PROJ',
 	media: 'MEDIA',
 	people: 'PPL',
-	merch: 'MERCH'
+	merch: 'MERCH',
+	applications: 'JOB',
+	transactions: 'TXN',
+	budgets: 'BDGT',
+	learning: 'LRN',
+	collections: 'COLL'
 };

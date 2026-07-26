@@ -15,7 +15,12 @@
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
 	const stats = $derived(data.stats ?? {});
-	const total = $derived(Object.values(stats).reduce((a, b) => a + b, 0));
+	// Counts what the sidebar shows. Hidden modules are excluded so the footer
+	// total matches the sum of the items above it rather than silently
+	// including rows you can't see from here.
+	const total = $derived(
+		MODULES.filter((m) => !m.hidden).reduce((sum, m) => sum + (stats[m.key] ?? 0), 0)
+	);
 
 	// This runs as a long-lived desktop window, so a rebuild leaves it holding
 	// the previous client bundle — and since the nav is built from code baked
@@ -45,6 +50,9 @@
 	const nav = $derived.by(() => {
 		const items: NavItem[] = [{ code: '~', label: 'Overview', href: '/', count: null }];
 		for (const m of MODULES) {
+			// Hidden modules (imported data not modelled yet) are reachable by URL
+			// and listed under /admin, but don't take a slot in the sidebar.
+			if (m.hidden) continue;
 			// The aggregated calendar and the shows pipeline sit where the events
 			// table lives — they're views over it (plus the other dated tables).
 			if (m.key === 'events') {

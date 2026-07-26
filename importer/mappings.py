@@ -104,4 +104,93 @@ SPECS: list[Spec] = [
     # ---- PEOPLE --------------------------------------------------------
     Spec("People", f"{PS}/People d3d842a197ea82dfb0d8014512d331ec_all.csv",
          models.Person, ["Name"], {"about": "About", "membership_type": "Membership Type"}),
+
+    # ---- JOB APPLICATIONS ----------------------------------------------
+    Spec("Job Applications",
+         f"{PS}/Main Hub/🚀 Job Search Hub — Personal Site Project/"
+         "🎯 Job Applications c169ae124bc046d1b990e4be4a6c265f_all.csv",
+         models.JobApplication, ["Role"],
+         {"company": "Company", "status": "Status", "priority": "Priority",
+          "location": "Location", "contact": "Contact", "posting_url": "Job Posting",
+          "salary_range": "Salary Range", "resume_version": "Resume Version",
+          "found_via": "Source", "track": "Track", "next_action": "Next Action",
+          "notes": "Notes",
+          "applied": lambda r: nd.parse_date(r.get("Date Applied")),
+          "follow_up": lambda r: nd.parse_date(r.get("Follow-up Date"))}),
+
+    # ---- MONEY ----------------------------------------------------------
+    Spec("Transaction Logs",
+         f"{PS}/Budget Tracker/Transaction Logs/"
+         "Transaction Logs 17d842a197ea819785b9d631f3bfc018_all.csv",
+         models.Transaction, ["Transaction Name"],
+         {"amount": lambda r: nd.to_float(r.get("Transaction Amount")),
+          "occurred_on": lambda r: nd.parse_date(r.get("Transaction Date")),
+          "kind": lambda r: nd.money_kind(r.get("Transaction Type"))}),
+    # Two Notion databases, one shape: a planned envelope and a standing bill
+    # both answer "what do I owe, how often".
+    Spec("Budget", f"{PS}/Budget Tracker/Budget/Budget 17d842a197ea817f8cacc1560c9ce8b5_all.csv",
+         models.Budget, ["Budget Name"],
+         {"frequency": "Frequency",
+          "amount": lambda r: nd.to_float(r.get("Budget Amount")),
+          "starts_on": lambda r: nd.parse_date(r.get("Start Date")),
+          "ends_on": lambda r: nd.parse_date(r.get("End Date"))}),
+    Spec("Budget Expenses",
+         f"{PS}/Admin/Budget Expenses 22e8a0b4739f47869c78486acf1a2d9a_all.csv",
+         models.Budget, ["Name"],
+         {"frequency": "Billing Cycle",
+          "amount": lambda r: nd.to_float(r.get("Cost")),
+          "last_paid": lambda r: nd.parse_date(r.get("Last Paid Date")),
+          "paid": lambda r: nd.to_bool(r.get("Paid"))}),
+
+    # ---- LEARNING --------------------------------------------------------
+    Spec("Continuing Education",
+         f"{RB}/Admin/Continuing Education 5a868a0263fa4174bdb0151117fceaf8_all.csv",
+         models.Learning, ["Name"],
+         {"status": "Status", "url": "URL", "via": "Source"}, tags_from="Tags"),
+
+    # ---- COLLECTIONS -----------------------------------------------------
+    # Small databases kept whole rather than modelled. Each row's original
+    # columns survive in `raw`; `summary` is just enough to recognise it.
+    # Hidden from the sidebar — see /admin.
+    *[
+        Spec(label, csv, models.Collection, [title_col],
+             {"collection": (lambda lbl: lambda r: lbl)(label),
+              "summary": (lambda tc: lambda r: nd.one_line(r, skip=(tc,)))(title_col)},
+             tags_from=tags_col)
+        for label, csv, title_col, tags_col in [
+            ("Shopping List",
+             f"{PS}/Admin/Shopping List 11c842a197ea8008a15ae2f9e21de705_all.csv",
+             "Name", "Tags"),
+            ("Ingredients",
+             f"{PS}/Admin/Ingredients 12c842a197ea80c18124d09cbfd2dfef_all.csv",
+             "Name", None),
+            ("Spending Categories",
+             f"{PS}/Budget Tracker/Spending Categories/"
+             "Spending Categories 17d842a197ea81d5961cf09d99be1156_all.csv",
+             "Category Name", None),
+            ("Sprints", f"{PS}/Admin/Sprints f769f6b15d3246eda38e4fd766817554_all.csv",
+             "Sprint name", None),
+            ("Incident Log",
+             f"{PS}/Admin/Incident Log 9b6d80c502254c7f9500dc66d1620a0e_all.csv",
+             "Incident", "Type"),
+            ("ADHD Tracker",
+             f"{PS}/Admin/ADHD Tracker 12c842a197ea807dafc4d3bf985c8ac2_all.csv",
+             "Name", "Tags"),
+            ("Nebraska Native Plants",
+             f"{PS}/Nebraska Native Plant Journey/NE Native Plant Admin/"
+             "Nebraska Native Plants 201842a197ea803c9201fa6ba0389bca_all.csv",
+             "Plant Name", None),
+            ("Pollinators",
+             f"{PS}/Nebraska Native Plant Journey/NE Native Plant Admin/"
+             "Pollinators 201842a197ea80b8bc70f575715f20dd_all.csv",
+             "Name", None),
+            ("Rich Fucking Losers",
+             "Zine/171842a197ea81fba707004254959b18/"
+             "RichFuckingLosers 192842a197ea80a6955df487bbd6a8b7_all.csv",
+             "Name", None),
+            ("Claude Skills",
+             f"{RB}/Claude/Skills 291842a197ea805ea4d3db681686555b_all.csv",
+             "Name", "tags"),
+        ]
+    ],
 ]

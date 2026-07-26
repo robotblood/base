@@ -14,6 +14,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		label: 'Design',
 		href: '/admin/design',
 		blurb: 'Typography, colour, shape — the tokens the whole app reads'
+	},
+	{
+		key: 'data',
+		label: 'Data',
+		href: '/admin/data',
+		blurb: 'Imported databases that aren’t modelled yet'
 	}
 ];
 

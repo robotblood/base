@@ -52,6 +52,12 @@ export interface ModuleConfig {
 	columns: Column[]; // list table
 	fields: FieldSpec[]; // add / edit form
 
+	// Kept out of the sidebar and the item total. The module still works
+	// everywhere else — its routes, forms and views are unchanged — it just
+	// doesn't compete for attention with live work. Imported data that isn't
+	// modelled yet lives this way until it earns a place; /admin lists them.
+	hidden?: boolean;
+
 	// --- view configuration (all optional; a module with none is table-only) ---
 	views?: ViewKind[]; // which views this module offers; defaults to ['table']
 	groupFields?: string[]; // fields usable as the board/group axis

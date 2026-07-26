@@ -25,11 +25,19 @@ from importer.mappings import SPECS, Spec
 TITLE_FIELD = {  # which model attr holds the display title
     "todos": "title", "notes": "title", "events": "title", "media": "title",
     "hardware": "name", "software": "name", "projects": "name", "people": "name",
+    "merch": "name", "applications": "role", "transactions": "name",
+    "budgets": "name", "learning": "name", "collections": "title",
 }
 
 
 def _title_attr(model) -> str:
-    return TITLE_FIELD[model.__tablename__]
+    table = model.__tablename__
+    if table not in TITLE_FIELD:
+        raise KeyError(
+            f"{table}: add it to TITLE_FIELD in importer/run_import.py "
+            "(which column holds the display title)"
+        )
+    return TITLE_FIELD[table]
 
 
 def _resolve_title(row: dict, cols: list[str]) -> str | None:

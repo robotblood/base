@@ -29,6 +29,11 @@ MODULES = [
     (models.Media, "media", "title"),
     (models.Person, "people", "name"),
     (models.Merch, "merch", "name"),
+    (models.JobApplication, "applications", "role"),
+    (models.Transaction, "transactions", "name"),
+    (models.Budget, "budgets", "name"),
+    (models.Learning, "learning", "name"),
+    (models.Collection, "collections", "title"),
 ]
 
 # modules whose list should sort by something other than the title column

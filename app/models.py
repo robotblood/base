@@ -152,6 +152,81 @@ class Project(Base, table=True):
     details: dict = Field(default_factory=dict, sa_type=JSONB)  # kind-specific: links, specs, ...
 
 
+class JobApplication(Base, table=True):
+    """A role applied for. `found_via` rather than `source` because the Base
+    class already uses `source` for which Notion database a row came from."""
+
+    __tablename__ = "applications"
+    role: str = Field(index=True)
+    company: Optional[str] = Field(default=None, index=True)
+    status: Optional[str] = Field(default=None, index=True)
+    priority: Optional[str] = None
+    location: Optional[str] = None
+    contact: Optional[str] = None
+    applied: Optional[date] = Field(default=None, index=True)
+    follow_up: Optional[date] = Field(default=None, index=True)
+    posting_url: Optional[str] = None
+    salary_range: Optional[str] = None
+    resume_version: Optional[str] = None
+    found_via: Optional[str] = None  # job board / referral / etc.
+    track: Optional[str] = None
+    next_action: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class Transaction(Base, table=True):
+    """Money that actually moved. Amounts are positive; `kind` carries the
+    direction, matching how the Notion export recorded it."""
+
+    __tablename__ = "transactions"
+    name: str = Field(index=True)
+    amount: Optional[float] = None
+    occurred_on: Optional[date] = Field(default=None, index=True)
+    kind: Optional[str] = Field(default=None, index=True)  # income | expense
+    category: Optional[str] = Field(default=None, index=True)
+    notes: Optional[str] = None
+
+
+class Budget(Base, table=True):
+    """A recurring money commitment — a budget envelope or a standing bill.
+    Both shapes from the Notion export live here: they answer the same
+    question ("what do I owe, how often"), only one is planned and the other
+    is already committed."""
+
+    __tablename__ = "budgets"
+    name: str = Field(index=True)
+    amount: Optional[float] = None
+    frequency: Optional[str] = Field(default=None, index=True)  # Monthly | Yearly
+    starts_on: Optional[date] = None
+    ends_on: Optional[date] = None
+    last_paid: Optional[date] = None
+    paid: Optional[bool] = None
+    category: Optional[str] = Field(default=None, index=True)
+
+
+class Learning(Base, table=True):
+    __tablename__ = "learning"
+    name: str = Field(index=True)
+    status: Optional[str] = Field(default=None, index=True)
+    url: Optional[str] = None
+    via: Optional[str] = None  # where it came from (see JobApplication.found_via)
+    notes: Optional[str] = None
+
+
+class Collection(Base, table=True):
+    """Small Notion databases kept whole but not yet modelled.
+
+    Rather than invent a half-empty table per database, each row keeps its
+    original columns in `raw` and names which database it came from. Nothing
+    is lost, and promoting one to a real module later is an ordinary
+    migration. Hidden from the sidebar; browsable under /admin."""
+
+    __tablename__ = "collections"
+    title: str = Field(index=True)
+    collection: Optional[str] = Field(default=None, index=True)
+    summary: Optional[str] = None  # the row's other columns, read as one line
+
+
 class Media(Base, table=True):
     __tablename__ = "media"
     title: str = Field(index=True)
@@ -181,3 +256,26 @@ class Setting(SQLModel, table=True):
     key: str = Field(primary_key=True)
     value: dict = Field(default_factory=dict, sa_type=JSONB)
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class SystemLog(SQLModel, table=True):
+    """Application events — what happened *to the system*, not what a process printed.
+
+    journald already holds stdout/stderr for both services and rotates it; this
+    table is the other half: unhandled errors, check results, backup and import
+    outcomes. Keeping it in Postgres makes it queryable next to the data it
+    describes, and puts it inside the same `pg_dump` that protects everything
+    else. Access-log noise deliberately stays out — journald is better at that
+    and this table would drown in it.
+    """
+
+    __tablename__ = "system_log"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    at: datetime = Field(default_factory=utcnow, index=True)
+    level: str = Field(default="info", index=True)  # debug | info | warn | error
+    source: str = Field(default="api", index=True)  # api | web | check | backup | import
+    # Dotted slug, e.g. "check.backup_fresh" or "http.error". Stable across
+    # runs so a check's history can be pulled with one indexed lookup.
+    event: str = Field(default="", index=True)
+    message: str = ""
+    detail: dict = Field(default_factory=dict, sa_type=JSONB)

@@ -114,3 +114,37 @@ def to_float(value: str | None) -> float | None:
         return None
     m = re.search(r"-?\d+(\.\d+)?", value.replace(",", ""))
     return float(m.group()) if m else None
+
+
+def to_bool(value: str | None) -> bool | None:
+    """Notion checkboxes export as Yes/No (or true/false); blank stays unset."""
+    v = (value or "").strip().lower()
+    if v in ("yes", "true", "checked", "✓"):
+        return True
+    if v in ("no", "false", "unchecked"):
+        return False
+    return None
+
+
+def money_kind(value: str | None) -> str | None:
+    """'🟢 Income' / '⭕️ Expense' -> 'income' / 'expense'. The export decorates
+    select values with emoji, which carry no meaning once stored."""
+    v = (value or "").lower()
+    if "income" in v:
+        return "income"
+    if "expense" in v:
+        return "expense"
+    return None
+
+
+def one_line(row: dict, skip: tuple[str, ...] = ()) -> str | None:
+    """A row's other columns as one readable line — enough to recognise a
+    record whose database isn't modelled yet. The full row still lives in
+    `raw`, so this is for display only."""
+    bits = [
+        f"{k}: {v.strip()}"
+        for k, v in row.items()
+        if k not in skip and isinstance(v, str) and v.strip()
+    ]
+    line = " · ".join(bits)
+    return line[:500] or None

@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 .env
-data/
+# Anchored to the repo root: a bare `data/` also matched source directories
+# further down (it silently swallowed web/src/routes/admin/data).
+/data/
 .screenshots/
-export/
+/export/
