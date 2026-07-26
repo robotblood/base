@@ -130,56 +130,136 @@ def _brief(obj, fields: tuple[str, ...]) -> dict:
     return {f: getattr(obj, f, None) for f in fields}
 
 
+# Project statuses that mean "not a live thread any more".
+_PROJECT_CLOSED = ["done", "archived", "complete", "completed", "cancelled"]
+# Phases seeded by a kind preset but never named carry no information, so they
+# don't get to be a project's "next action".
+_PLACEHOLDER_PHASE = {"", "new phase", "untitled"}
+
+
+def _next_action(phases) -> str | None:
+    """A project's next move: the phase in flight, else the first one waiting.
+    Returns None when the phases are unset or still placeholders — the home
+    screen says "no phase set" rather than inventing progress."""
+    rows = [p for p in (phases or []) if isinstance(p, dict)]
+    ordered = [p for p in rows if p.get("status") == "active"]
+    ordered += [p for p in rows if p.get("status") == "todo"]
+    for phase in ordered:
+        name = str(phase.get("name") or "").strip()
+        if name.lower() not in _PLACEHOLDER_PHASE:
+            return name
+    return None
+
+
 @app.get("/dashboard")
 def dashboard():
-    """Actionable feed: what's overdue / due soon, in progress, waiting on,
-    upcoming, and recent — the home screen's working view of the system."""
+    """The home screen, organised by *thread* rather than by record status.
+
+    This system holds a handful of live projects and a few big dates, not a
+    queue of dated tickets — so the feed is one entry per live project (its
+    next phase, its rollup counts, and for live shows its upcoming dates),
+    plus loose ends and the notes most recently worked on.
+    """
     today = date.today()
-    horizon = today + timedelta(days=14)
     now = datetime.now()
     T, E, N, P = models.Todo, models.Event, models.Note, models.Project
     not_done = func.lower(func.coalesce(T.status, "")) != "done"
 
     with Session(engine) as session:
-        def todos(where, order, limit=10):
-            rows = session.exec(select(T).where(where).order_by(order).limit(limit)).all()
-            return [_brief(t, ("id", "title", "due", "status", "priority")) for t in rows]
-
-        overdue = todos(and_(T.due.is_not(None), T.due < today, not_done), T.due.asc())
-        due_soon = todos(and_(T.due >= today, T.due <= horizon, not_done), T.due.asc())
-        in_progress = todos(
-            func.lower(func.coalesce(T.status, "")).in_(["in progress", "doing"]), T.due.asc()
-        )
-        waiting = todos(
-            func.lower(func.coalesce(T.status, "")).in_(
-                ["submitted", "draft", "waiting", "blocked", "in review", "review"]
-            ),
-            T.updated_at.desc(),
-        )
-
-        upcoming = session.exec(
-            select(E).where(E.starts_at.is_not(None), E.starts_at >= now)
-            .order_by(E.starts_at.asc()).limit(8)
+        projects = session.exec(
+            select(P)
+            .where(func.lower(func.coalesce(P.status, "")).not_in(_PROJECT_CLOSED))
+            .order_by(P.name)
+            .limit(12)
         ).all()
-        recent_meetings = session.exec(
-            select(N).where(func.lower(func.coalesce(N.kind, "")) == "meeting")
-            .order_by(func.coalesce(N.meeting_time, N.created_at).desc()).limit(6)
-        ).all()
-        active_projects = session.exec(
-            select(P).where(
-                func.lower(func.coalesce(P.status, "")).not_in(
-                    ["done", "archived", "complete", "completed", "cancelled"]
+        pids = [p.id for p in projects]
+
+        # Rollups in one query each rather than per project.
+        def counts_by_project(stmt):
+            return {pid: n for pid, n in session.exec(stmt).all() if pid is not None}
+
+        tasks = (
+            counts_by_project(
+                select(T.project_id, func.count())
+                .where(T.project_id.in_(pids), not_done)
+                .group_by(T.project_id)
+            )
+            if pids
+            else {}
+        )
+        notes = (
+            counts_by_project(
+                select(N.project_id, func.count())
+                .where(N.project_id.in_(pids))
+                .group_by(N.project_id)
+            )
+            if pids
+            else {}
+        )
+
+        # Upcoming performances, grouped onto their project. Advance state
+        # lives in the show doc, so the thread can say what still needs work.
+        shows: dict[int, list[dict]] = {}
+        if pids:
+            rows = session.exec(
+                select(E)
+                .where(
+                    E.project_id.in_(pids),
+                    E.kind == "performance",
+                    E.starts_at.is_not(None),
+                    E.starts_at >= now,
                 )
-            ).order_by(P.name).limit(8)
+                .order_by(E.starts_at.asc())
+            ).all()
+            for e in rows:
+                entry = _brief(e, ("id", "title", "starts_at", "location", "status"))
+                entry["advance"] = (e.show or {}).get("advance")
+                shows.setdefault(e.project_id, []).append(entry)
+
+        threads = []
+        for p in projects:
+            mine = shows.get(p.id, [])
+            threads.append(
+                {
+                    **_brief(p, ("id", "name", "kind", "status", "health", "due")),
+                    "next_action": _next_action(p.phases),
+                    "counts": {
+                        "tasks": tasks.get(p.id, 0),
+                        "notes": notes.get(p.id, 0),
+                        "shows": len(mine),
+                    },
+                    "shows": mine,
+                    # A date to count down to: the first show, else the due date.
+                    "opens_at": mine[0]["starts_at"].isoformat() if mine else None,
+                    # Advance is only tracked on performances; "Advanced" is the
+                    # finished state, so anything else still needs a call.
+                    "unadvanced": sum(1 for s in mine if s["advance"] != "Advanced"),
+                }
+            )
+
+        # Notes you actually touched, newest first — imported rows sink as soon
+        # as anything real is edited.
+        recent_notes = session.exec(
+            select(N).order_by(func.coalesce(N.updated_at, N.created_at).desc()).limit(6)
         ).all()
+
+        overdue = session.exec(
+            select(T).where(T.due.is_not(None), T.due < today, not_done).order_by(T.due.asc()).limit(6)
+        ).all()
+        undated = session.exec(
+            select(func.count()).select_from(T).where(T.due.is_(None), not_done)
+        ).one()
+        open_total = session.exec(select(func.count()).select_from(T).where(not_done)).one()
 
     return {
         "today": today.isoformat(),
-        "overdue": overdue,
-        "due_soon": due_soon,
-        "in_progress": in_progress,
-        "waiting": waiting,
-        "upcoming_events": [_brief(e, ("id", "title", "starts_at", "kind", "location")) for e in upcoming],
-        "recent_meetings": [_brief(n, ("id", "title", "meeting_time", "meeting_type")) for n in recent_meetings],
-        "active_projects": [_brief(p, ("id", "name", "status")) for p in active_projects],
+        "threads": threads,
+        "recent_notes": [
+            _brief(n, ("id", "title", "kind", "updated_at", "project_id")) for n in recent_notes
+        ],
+        "loose": {
+            "overdue": [_brief(t, ("id", "title", "due", "status", "priority")) for t in overdue],
+            "undated": undated,
+            "open_total": open_total,
+        },
     }

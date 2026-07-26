@@ -40,15 +40,19 @@ export const load: PageServerLoad = async () => {
 	let dashboard: DashboardData | null = null;
 	let apiError: string | null = null;
 	let latestShow: { id: number; name: string } | null = null;
-	let shows: { id: number; title: string; when: string; location: string; projectId: number | null }[] =
-		[];
 	let weekNote: { id: number; tasks: { text: string; done: boolean }[] } | null = null;
 	try {
+		// Threads, recent notes and loose ends all come from /dashboard now; the
+		// only things left to resolve here are the two quick-action targets.
 		dashboard = await api.dashboard();
-		const [projects, events] = await Promise.all([api.list('projects'), api.list('events')]);
-		// This week's note (if started) and its checklist for the Overview card.
 		const weeklyTitle = `Weekly — ${mondayISO()}`;
-		const wn = (await api.list('notes', weeklyTitle)).find((n) => n.title === weeklyTitle);
+		const [projects, weekly] = await Promise.all([
+			api.list('projects'),
+			api.list('notes', weeklyTitle)
+		]);
+		// This week's running note, if it's been started — its "## Tasks"
+		// checklist is the week's working list.
+		const wn = weekly.find((n) => n.title === weeklyTitle);
 		if (wn) weekNote = { id: wn.id as number, tasks: parseTasks(String(wn.body ?? '')) };
 		// Most recently updated project with a rundown — the "New song" target.
 		const withRundown = projects
@@ -56,23 +60,10 @@ export const load: PageServerLoad = async () => {
 			.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
 		if (withRundown.length)
 			latestShow = { id: withRundown[0].id as number, name: String(withRundown[0].name) };
-		// Upcoming performances — the shows you're actually playing.
-		const now = new Date().toISOString();
-		shows = events
-			.filter((e) => e.kind === 'performance' && String(e.starts_at ?? '') >= now)
-			.sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
-			.slice(0, 8)
-			.map((e) => ({
-				id: e.id as number,
-				title: String(e.title),
-				when: String(e.starts_at),
-				location: String(e.location ?? ''),
-				projectId: (e.project_id as number | null) ?? null
-			}));
 	} catch (e) {
 		apiError = e instanceof Error ? e.message : String(e);
 	}
-	return { dashboard, apiError, latestShow, shows, weekNote, weekOf: mondayISO() };
+	return { dashboard, apiError, latestShow, weekNote, weekOf: mondayISO() };
 };
 
 export const actions: Actions = {

@@ -94,21 +94,43 @@ export interface EventBrief {
 export interface NoteBrief {
 	id: number;
 	title: string;
-	meeting_time: string | null;
-	meeting_type: string | null;
+	kind: string | null;
+	updated_at: string | null;
+	project_id: number | null;
 }
 export interface ProjectBrief {
 	id: number;
 	name: string;
 	status: string | null;
 }
+// One upcoming performance inside a thread, with the advance state that says
+// whether it still needs work.
+export interface ThreadShow {
+	id: number;
+	title: string;
+	starts_at: string | null;
+	location: string | null;
+	status: string | null;
+	advance: string | null;
+}
+// A live project as the home screen sees it: what it is, what's next, what
+// hangs off it, and (for live shows) the dates it's building toward.
+export interface Thread {
+	id: number;
+	name: string;
+	kind: string | null;
+	status: string | null;
+	health: string | null;
+	due: string | null;
+	next_action: string | null;
+	counts: { tasks: number; notes: number; shows: number };
+	shows: ThreadShow[];
+	opens_at: string | null;
+	unadvanced: number;
+}
 export interface DashboardData {
 	today: string;
-	overdue: TodoBrief[];
-	due_soon: TodoBrief[];
-	in_progress: TodoBrief[];
-	waiting: TodoBrief[];
-	upcoming_events: EventBrief[];
-	recent_meetings: NoteBrief[];
-	active_projects: ProjectBrief[];
+	threads: Thread[];
+	recent_notes: NoteBrief[];
+	loose: { overdue: TodoBrief[]; undated: number; open_total: number };
 }
