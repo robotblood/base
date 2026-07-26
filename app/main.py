@@ -28,6 +28,7 @@ MODULES = [
     (models.Project, "projects", "name"),
     (models.Media, "media", "title"),
     (models.Person, "people", "name"),
+    (models.Merch, "merch", "name"),
 ]
 
 # modules whose list should sort by something other than the title column

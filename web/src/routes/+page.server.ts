@@ -12,7 +12,10 @@ function mondayISO(): string {
 	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-const WEEKLY_TEMPLATE = `## Focus
+const WEEKLY_TEMPLATE = `## Tasks
+- [ ]
+
+## Focus
 -
 
 ## Log
@@ -22,15 +25,31 @@ const WEEKLY_TEMPLATE = `## Focus
 -
 `;
 
+// Checkbox lines from a note body — the weekly note's "## Tasks" checklist,
+// surfaced on the Overview as this week's task list.
+function parseTasks(body: string): { text: string; done: boolean }[] {
+	const out: { text: string; done: boolean }[] = [];
+	for (const line of body.split('\n')) {
+		const m = /^\s*[-*]\s*\[([ xX])\]\s*(.+)$/.exec(line);
+		if (m) out.push({ text: m[2].trim(), done: m[1] !== ' ' });
+	}
+	return out;
+}
+
 export const load: PageServerLoad = async () => {
 	let dashboard: DashboardData | null = null;
 	let apiError: string | null = null;
 	let latestShow: { id: number; name: string } | null = null;
 	let shows: { id: number; title: string; when: string; location: string; projectId: number | null }[] =
 		[];
+	let weekNote: { id: number; tasks: { text: string; done: boolean }[] } | null = null;
 	try {
 		dashboard = await api.dashboard();
 		const [projects, events] = await Promise.all([api.list('projects'), api.list('events')]);
+		// This week's note (if started) and its checklist for the Overview card.
+		const weeklyTitle = `Weekly — ${mondayISO()}`;
+		const wn = (await api.list('notes', weeklyTitle)).find((n) => n.title === weeklyTitle);
+		if (wn) weekNote = { id: wn.id as number, tasks: parseTasks(String(wn.body ?? '')) };
 		// Most recently updated project with a rundown — the "New song" target.
 		const withRundown = projects
 			.filter((p) => p.rundown)
@@ -53,7 +72,7 @@ export const load: PageServerLoad = async () => {
 	} catch (e) {
 		apiError = e instanceof Error ? e.message : String(e);
 	}
-	return { dashboard, apiError, latestShow, shows, weekOf: mondayISO() };
+	return { dashboard, apiError, latestShow, shows, weekNote, weekOf: mondayISO() };
 };
 
 export const actions: Actions = {
@@ -63,7 +82,7 @@ export const actions: Actions = {
 		const found = (await api.list('notes', title)).find((n) => n.title === title);
 		const id =
 			found?.id ??
-			(await api.create('notes', { title, kind: 'journal', body: WEEKLY_TEMPLATE })).id;
+			(await api.create('notes', { title, kind: 'weekly', body: WEEKLY_TEMPLATE })).id;
 		redirect(303, `/notes/${id}`);
 	},
 	// Quick capture: a bare todo, straight into the inbox, stay on the page.

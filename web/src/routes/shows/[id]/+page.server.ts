@@ -28,5 +28,14 @@ export const load: PageServerLoad = async ({ params }) => {
 			? api.get('people', ev.contact_id as number).catch(() => null)
 			: Promise.resolve(null)
 	]);
-	return { ev, project, siblings, contact };
+	// The People database as {id, name} options for the contact picker.
+	const directory = await api
+		.list('people')
+		.then((rows) =>
+			rows
+				.map((r) => ({ id: String(r.id), name: String(r.name ?? `#${r.id}`) }))
+				.sort((a, b) => a.name.localeCompare(b.name))
+		)
+		.catch(() => []);
+	return { ev, project, siblings, contact, directory };
 };

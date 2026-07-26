@@ -30,9 +30,13 @@
 	// Slash menu state (rendered here, driven by slash.ts callbacks).
 	let menu = $state<{ items: SlashItem[]; index: number; x: number; y: number } | null>(null);
 	let applyItem: ((item: SlashItem) => void) | null = null;
+	// Live caret-rect getter, kept so the fixed-position menu can track the
+	// caret when the page scrolls instead of staying pinned where it opened.
+	let anchor: (() => DOMRect | null | undefined) | null = null;
 
 	function place(props: SuggestionProps<SlashItem>) {
-		const rect = props.clientRect?.();
+		anchor = props.clientRect ?? null;
+		const rect = anchor?.();
 		if (!rect) return;
 		menu = {
 			items: props.items,
@@ -41,6 +45,13 @@
 			y: rect.bottom + 6
 		};
 		applyItem = (item) => props.command(item);
+	}
+
+	function reposition() {
+		const rect = anchor?.();
+		if (!menu || !rect) return;
+		menu.x = Math.min(rect.left, window.innerWidth - 280);
+		menu.y = rect.bottom + 6;
 	}
 
 	function menuKey({ event }: SuggestionKeyDownProps): boolean {
@@ -101,7 +112,22 @@
 		});
 		return () => editor?.destroy();
 	});
+
+	// Follow external value changes. The editor reads `content` once at mount,
+	// which can be before the parent has loaded the record's body — without
+	// this, a note with existing content mounts as an empty editor, and the
+	// next autosave would overwrite the stored body with that emptiness.
+	$effect(() => {
+		const md = value;
+		if (!editor) return;
+		const current = (
+			editor.storage as unknown as { markdown: { getMarkdown: () => string } }
+		).markdown.getMarkdown();
+		if (md !== current) editor.commands.setContent(md, { emitUpdate: false });
+	});
 </script>
+
+<svelte:window onscrollcapture={reposition} onresize={reposition} />
 
 <div bind:this={host} class="note-editor min-h-[180px]"></div>
 

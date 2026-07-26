@@ -83,6 +83,28 @@ export class Tracker {
 		}
 	}
 
+	// Upload files straight into the project's linked folder (drag-drop or the
+	// ADD button on the FILES card), then refresh the listing.
+	uploading = $state(false);
+	async uploadFiles(pid: string, list: FileList | File[]) {
+		const files = [...list];
+		if (!files.length) return;
+		this.uploading = true;
+		try {
+			const fd = new FormData();
+			for (const f of files) fd.append('files', f);
+			const res = await fetch(`/projects/${pid}/upload`, { method: 'POST', body: fd });
+			if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+			const { saved } = (await res.json()) as { saved: string[] };
+			toast.success(saved.length === 1 ? `Added ${saved[0]}` : `Added ${saved.length} files`);
+			void this.loadFiles(pid, true);
+		} catch (e) {
+			toast.error('Upload failed', { description: String(e) });
+		} finally {
+			this.uploading = false;
+		}
+	}
+
 	// Rename or move a file inside the project folder (server keeps rundown
 	// attachments pointing at it), then refresh the listing and the rundown.
 	private async fileOp(pid: string, body: Record<string, string>) {

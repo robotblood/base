@@ -16,15 +16,24 @@
 	const stats = $derived(data.stats ?? {});
 	const total = $derived(Object.values(stats).reduce((a, b) => a + b, 0));
 
-	const nav = $derived([
-		{ code: '~', label: 'Overview', href: '/', count: null as number | null },
-		...MODULES.map((m) => ({
-			code: MODULE_CODES[m.key] ?? '',
-			label: m.label,
-			href: `/${m.key}`,
-			count: stats[m.key] ?? 0
-		}))
-	]);
+	const nav = $derived.by(() => {
+		const items = [{ code: '~', label: 'Overview', href: '/', count: null as number | null }];
+		for (const m of MODULES) {
+			// The aggregated calendar and the shows pipeline sit where the events
+			// table lives — they're views over it (plus the other dated tables).
+			if (m.key === 'events') {
+				items.push({ code: 'CAL', label: 'Calendar', href: '/calendar', count: null });
+				items.push({ code: 'SHOW', label: 'Shows', href: '/shows', count: null });
+			}
+			items.push({
+				code: MODULE_CODES[m.key] ?? '',
+				label: m.label,
+				href: `/${m.key}`,
+				count: stats[m.key] ?? 0
+			});
+		}
+		return items;
+	});
 
 	function isActive(href: string) {
 		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);

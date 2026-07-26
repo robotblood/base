@@ -71,9 +71,23 @@ export const MODULES: ModuleConfig[] = [
 		],
 		fields: [
 			{ name: 'title', label: 'Title', type: 'text', required: true },
-			{ name: 'kind', label: 'Kind', type: 'select', options: ['note', 'meeting', 'journal'] },
+			{
+				name: 'kind',
+				label: 'Kind',
+				type: 'select',
+				// The going-forward vocabulary; 'journal' remains for imported rows,
+				// which are deliberately left as-is (no migration).
+				options: ['note', 'meeting', 'daily', 'weekly', 'journal']
+			},
 			{ name: 'project_id', label: 'Project', type: 'relation', ref: 'projects' },
-			{ name: 'meeting_type', label: 'Meeting type', type: 'text' },
+			{
+				name: 'meeting_type',
+				label: 'Meeting type',
+				type: 'select',
+				// Only meaningful (and only shown) when kind = meeting; legacy values
+				// like "Daily Notes" survive via the unknown-value option in selects.
+				options: ['Production Meeting', 'Weekly Meeting', 'Personal', 'Research', 'Other']
+			},
 			{ name: 'meeting_time', label: 'When', type: 'datetime' },
 			{
 				name: 'status',
@@ -101,7 +115,9 @@ export const MODULES: ModuleConfig[] = [
 	},
 	{
 		key: 'events',
-		label: 'Calendar',
+		// The aggregated /calendar page owns the "Calendar" name; this module is
+		// the storage table for real events.
+		label: 'Events',
 		singular: 'event',
 		titleField: 'title',
 		columns: [
@@ -168,17 +184,25 @@ export const MODULES: ModuleConfig[] = [
 			{ header: 'Name', field: 'name' },
 			{ header: 'Category', field: 'category' },
 			{ header: 'Company', field: 'company' },
-			{ header: 'CPU', field: 'cpu' },
+			{ header: 'Model', field: 'model' },
+			{ header: 'CPU', field: 'cpu', hidden: true },
 			{ header: 'Qty', field: 'quantity' },
-			{ header: 'Watts', field: 'power_w' }
+			{ header: 'Watts', field: 'power_w', hidden: true },
+			{ header: 'Price', field: 'price', hidden: true }
 		],
 		fields: [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
 			{ name: 'category', label: 'Category', type: 'text' },
 			{ name: 'company', label: 'Company', type: 'text' },
+			{ name: 'model', label: 'Model', type: 'text' },
 			{ name: 'cpu', label: 'CPU', type: 'text' },
 			{ name: 'quantity', label: 'Quantity', type: 'number' },
 			{ name: 'power_w', label: 'Power (W)', type: 'number' },
+			{ name: 'price', label: 'Price', type: 'number' },
+			{ name: 'purchase_date', label: 'Purchased', type: 'date' },
+			{ name: 'photo_url', label: 'Photo URL', type: 'text' },
+			{ name: 'product_url', label: 'Product page', type: 'text' },
+			{ name: 'support_url', label: 'Support page', type: 'text' },
 			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
@@ -193,16 +217,76 @@ export const MODULES: ModuleConfig[] = [
 		titleField: 'name',
 		columns: [
 			{ header: 'Name', field: 'name' },
-			{ header: 'URL', field: 'url' }
+			{ header: 'Category', field: 'category' },
+			{ header: 'Version', field: 'version' },
+			{ header: 'License', field: 'license' },
+			{ header: 'URL', field: 'url', hidden: true }
 		],
 		fields: [
 			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{ name: 'category', label: 'Category', type: 'text' },
+			{ name: 'version', label: 'Version', type: 'text' },
+			{
+				name: 'license',
+				label: 'License',
+				type: 'select',
+				options: ['subscription', 'perpetual', 'open source', 'free', 'bundled']
+			},
 			{ name: 'url', label: 'URL', type: 'text' },
+			{ name: 'support_url', label: 'Support page', type: 'text' },
 			{ name: 'path', label: 'Folder path', type: 'text' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'group'],
-		groupFields: ['tags'],
+		groupFields: ['category', 'license', 'tags'],
+		defaultSort: { field: 'name', dir: 'asc' }
+	},
+	{
+		key: 'merch',
+		label: 'Merch',
+		singular: 'merch item',
+		titleField: 'name',
+		columns: [
+			{ header: 'Name', field: 'name' },
+			{ header: 'Category', field: 'category', render: 'badge' },
+			{ header: 'Price', field: 'price' },
+			{ header: 'Stock', field: 'stock' },
+			{ header: 'SKU', field: 'sku', hidden: true },
+			{ header: 'Cost', field: 'cost', hidden: true },
+			{ header: 'Project', field: 'project_id_label', hidden: true }
+		],
+		fields: [
+			{ name: 'name', label: 'Name', type: 'text', required: true },
+			{
+				name: 'category',
+				label: 'Category',
+				type: 'select',
+				options: ['T-shirt', 'Album', 'Vinyl', 'Cassette', 'Sticker', 'Poster', 'Other']
+			},
+			{ name: 'sku', label: 'SKU', type: 'text' },
+			{ name: 'price', label: 'Price', type: 'number' },
+			{ name: 'cost', label: 'Cost', type: 'number' },
+			{ name: 'stock', label: 'In stock', type: 'number' },
+			{ name: 'low_stock_at', label: 'Low-stock alert at', type: 'number' },
+			{ name: 'project_id', label: 'Project / album', type: 'relation', ref: 'projects' },
+			{ name: 'url', label: 'Store URL', type: 'text' },
+			{ name: 'photo_url', label: 'Photo URL', type: 'text' },
+			{ name: 'path', label: 'Folder path', type: 'text' },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'board', 'group'],
+		groupFields: ['category', 'tags'],
+		statusField: 'category',
+		statusColors: {
+			'T-shirt': STATE.progress,
+			Album: STATE.good,
+			Vinyl: STATE.done,
+			Cassette: STATE.idle,
+			Sticker: STATE.muted,
+			Poster: STATE.attention,
+			Other: STATE.muted
+		},
 		defaultSort: { field: 'name', dir: 'asc' }
 	},
 	{
@@ -334,10 +418,11 @@ export function getModule(key: string): ModuleConfig | undefined {
 export const MODULE_CODES: Record<string, string> = {
 	todos: 'TODO',
 	notes: 'NOTE',
-	events: 'CAL',
+	events: 'EVT',
 	hardware: 'HW',
 	software: 'SW',
 	projects: 'PROJ',
 	media: 'MEDIA',
-	people: 'PPL'
+	people: 'PPL',
+	merch: 'MERCH'
 };

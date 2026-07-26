@@ -85,17 +85,44 @@ class Hardware(Base, table=True):
     name: str = Field(index=True)
     category: Optional[str] = Field(default=None, index=True)
     company: Optional[str] = None
+    model: Optional[str] = None
     cpu: Optional[str] = None
     quantity: Optional[int] = 1
     power_w: Optional[float] = None
+    price: Optional[float] = None
+    purchase_date: Optional[date] = None
+    photo_url: Optional[str] = None  # product image (remote URL renders inline)
+    product_url: Optional[str] = None  # manufacturer product page
+    support_url: Optional[str] = None  # direct support/manual page
     path: Optional[str] = None  # manuals, photos, config backups — media previews
 
 
 class Software(Base, table=True):
     __tablename__ = "software"
     name: str = Field(index=True)
+    category: Optional[str] = Field(default=None, index=True)  # DAW | 3D | design | dev …
+    version: Optional[str] = None
+    license: Optional[str] = None  # subscription | perpetual | open source …
     url: Optional[str] = None
+    support_url: Optional[str] = None  # direct support/docs page
     path: Optional[str] = None  # installers, licenses, project templates — media previews
+
+
+class Merch(Base, table=True):
+    __tablename__ = "merch"
+    name: str = Field(index=True)
+    category: Optional[str] = Field(default=None, index=True)  # T-shirt | Album | Vinyl …
+    sku: Optional[str] = None
+    price: Optional[float] = None
+    cost: Optional[float] = None
+    stock: Optional[int] = 0
+    low_stock_at: Optional[int] = None  # flag when stock falls to/below this
+    url: Optional[str] = None  # store/listing page
+    photo_url: Optional[str] = None
+    notes: Optional[str] = None
+    # Link to a projects.id (loose reference, same convention as todos/notes).
+    project_id: Optional[int] = Field(default=None, index=True)
+    path: Optional[str] = None  # artwork, print files — media previews
 
 
 class Project(Base, table=True):

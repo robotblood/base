@@ -18,11 +18,19 @@ export const load: PageServerLoad = async ({ params }) => {
 	} catch {
 		throw error(404, `No ${mod.singular} #${params.id}`);
 	}
-	const [relationOptions, tagSuggestions] = await Promise.all([
+	const [relationOptions, tagSuggestions, attendeeSuggestions] = await Promise.all([
 		loadRelationOptions(mod),
-		loadTagSuggestions()
+		loadTagSuggestions(),
+		// Attendees suggest People (with free-typed one-offs still allowed),
+		// not the shared tag vocabulary.
+		mod.key === 'notes'
+			? api.list('people').then(
+					(ppl) => ppl.map((p) => String(p.name ?? '')).filter(Boolean),
+					() => []
+				)
+			: Promise.resolve(null)
 	]);
-	return { moduleKey: mod.key, item, relationOptions, tagSuggestions };
+	return { moduleKey: mod.key, item, relationOptions, tagSuggestions, attendeeSuggestions };
 };
 
 export const actions: Actions = {

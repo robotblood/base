@@ -121,8 +121,18 @@
 	<!-- Quick start: one click from logged-in to working. -->
 	<div class="mb-6 flex flex-wrap items-stretch gap-2.5">
 		<form method="POST" action="?/weekly" use:enhance>
-			<button type="submit" class={quickBtn} title="Open (or start) this week's note">
+			<button
+				type="submit"
+				class={quickBtn}
+				title={`Open (or start) the note for the week of ${data.weekOf}`}
+			>
 				<NotebookPen class="size-4 text-signal" /> Weekly note
+				<span class="font-mono text-[10px] font-normal text-muted-foreground">
+					wk of {new Date(data.weekOf + 'T00:00:00').toLocaleDateString('en-US', {
+						month: 'short',
+						day: 'numeric'
+					})}
+				</span>
 			</button>
 		</form>
 		{#if data.latestShow}
@@ -160,6 +170,42 @@
 			>
 		</form>
 	</div>
+
+	<!-- This week's tasks, read from the weekly note's "## Tasks" checklist. -->
+	{#if data.weekNote}
+		{@const open = data.weekNote.tasks.filter((t) => !t.done)}
+		{@const done = data.weekNote.tasks.length - open.length}
+		<div class="mb-6 overflow-hidden rounded-[12px] border bg-card">
+			<div class="flex items-center justify-between border-b px-5 py-3">
+				<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+					This week
+				</span>
+				<a
+					href={`/notes/${data.weekNote.id}`}
+					class="font-mono text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground/80"
+				>
+					{done}/{data.weekNote.tasks.length} done · open note
+				</a>
+			</div>
+			<div class="divide-y">
+				{#each open as t (t.text)}
+					<a
+						href={`/notes/${data.weekNote.id}`}
+						class="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-accent"
+					>
+						<span class="size-3.5 flex-none rounded-[4px] border border-input"></span>
+						<span class="min-w-0 truncate text-sm">{t.text}</span>
+					</a>
+				{:else}
+					<p class="px-5 py-3.5 font-mono text-xs text-muted-foreground">
+						{data.weekNote.tasks.length
+							? 'All of this week’s tasks are done.'
+							: 'No tasks yet — add checkboxes under "## Tasks" in the weekly note.'}
+					</p>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Upcoming shows — dates you're playing, straight off the Calendar. -->
 	<div class="mb-6 overflow-hidden rounded-[12px] border bg-card">

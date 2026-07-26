@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { deserialize, enhance } from '$app/forms';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import NoteEditor from '$lib/components/editor/NoteEditor.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
+	import { cn } from '$lib/utils';
 	import { getModule, MODULE_CODES } from '$lib/modules';
 	import { fmt } from '$lib/format';
 	import ModuleFields from '$lib/components/ModuleFields.svelte';
@@ -64,14 +65,149 @@
 	// form via a hidden input.
 	let bodyText = $state('');
 	let docTab = $state<'doc' | 'md'>('doc');
+	// Sync from the record only when it's a different record — a refresh of the
+	// same item must never clobber text being typed right now.
+	let bodyDocId: unknown;
 	$effect(() => {
 		if (!mod.docField) return;
-		item.id; // re-sync when the record changes
+		if (item.id === bodyDocId) return;
+		bodyDocId = item.id;
 		bodyText = String(item[mod.docField] ?? '');
 	});
-	function saveDoc() {
-		(document.getElementById('record-form') as HTMLFormElement | null)?.requestSubmit();
+
+	// ---- Autosave -----------------------------------------------------------
+	// Every edit — fields or document — saves on its own after a short pause,
+	// and any still-pending edit is flushed when you navigate away or close the
+	// tab. Nothing is ever lost to a forgotten Save click.
+	type SaveState = 'saved' | 'pending' | 'saving' | 'error';
+	let saveState = $state<SaveState>('saved');
+	let saveTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastSaved: string | null = null; // form snapshot as of the last successful save
+
+	const formEl = () => document.getElementById('record-form') as HTMLFormElement | null;
+	const snapshot = (fd: FormData) =>
+		JSON.stringify([...fd.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : v.name]));
+
+	// Baseline the snapshot once the form for this record is in the DOM, so the
+	// first autosave only fires on a real edit.
+	$effect(() => {
+		item.id;
+		queueMicrotask(() => {
+			const f = formEl();
+			if (f) lastSaved = snapshot(new FormData(f));
+		});
+	});
+
+	async function doSave(keepalive = false) {
+		const f = formEl();
+		if (!f) return;
+		const fd = new FormData(f);
+		const snap = snapshot(fd);
+		if (snap === lastSaved) {
+			if (saveState !== 'error') saveState = 'saved';
+			return;
+		}
+		saveState = 'saving';
+		try {
+			const res = await fetch(`${base}?/update`, {
+				method: 'POST',
+				body: fd,
+				keepalive,
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
+				lastSaved = snap;
+				// Edits made while the request was in flight → save again.
+				const now = formEl();
+				if (now && snapshot(new FormData(now)) !== snap) scheduleSave();
+				else saveState = 'saved';
+			} else {
+				saveState = 'error';
+				toast.error(
+					String(
+						(result.type === 'failure' && result.data?.message) || 'Autosave failed — retrying'
+					)
+				);
+				scheduleSave(4000);
+			}
+		} catch {
+			saveState = 'error';
+			toast.error('Autosave failed — is the server up? Retrying…');
+			scheduleSave(4000);
+		}
 	}
+
+	function scheduleSave(delay = 800) {
+		if (saveState !== 'saving') saveState = 'pending';
+		if (saveTimer) clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => {
+			saveTimer = null;
+			void doSave();
+		}, delay);
+	}
+
+	function flushNow(keepalive = false) {
+		if (saveTimer) {
+			clearTimeout(saveTimer);
+			saveTimer = null;
+		}
+		void doSave(keepalive);
+	}
+
+	beforeNavigate(() => flushNow(true));
+	function onLifecycleHide() {
+		if (document.visibilityState === 'hidden') flushNow(true);
+	}
+	function saveDoc() {
+		flushNow();
+	}
+
+	const saveLabel: Record<SaveState, string> = {
+		saved: 'All changes saved',
+		pending: 'Unsaved changes…',
+		saving: 'Saving…',
+		error: 'Save failed — will retry'
+	};
+
+	// Notes get a header strip: the fields you actually reach for (status high
+	// on the page), with meeting type only shown for meetings. kindLive tracks
+	// the select as it's edited so the strip reshapes immediately.
+	const STRIP_FIELDS = ['kind', 'meeting_type', 'status', 'meeting_time', 'project_id'];
+	let kindLive = $state('');
+	$effect(() => {
+		item.id;
+		kindLive = String(item.kind ?? '');
+	});
+	function syncKind() {
+		const el = document.getElementById('kind') as HTMLSelectElement | null;
+		if (el) kindLive = el.value;
+	}
+	const stripFields = $derived(
+		mod.key === 'notes'
+			? mod.fields.filter(
+					(f) =>
+						STRIP_FIELDS.includes(f.name) && (f.name !== 'meeting_type' || kindLive === 'meeting')
+				)
+			: []
+	);
+
+	// Product links + photo, rendered (not just stored) when present.
+	const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+	const photoUrl = $derived(str(item.photo_url));
+	const productLinks = $derived(
+		(
+			[
+				['Product page', str(item.product_url)],
+				['Support', str(item.support_url)],
+				[mod.key === 'merch' ? 'Store' : 'Website', str(item.url)]
+			] as [string, string | null][]
+		).filter(([, v]) => v)
+	);
+	const detailExclude = $derived([
+		...(mod.docField ? [mod.docField] : []),
+		...(mod.key === 'notes' ? STRIP_FIELDS : [])
+	]);
 
 	let media = $state<MediaItem[]>([]);
 	let mediaCapped = $state(false);
@@ -98,11 +234,36 @@
 		else if (e.key === 'ArrowLeft') step(-1);
 	}
 
+	// Add-files into the linked folder: hidden picker + drag-drop on the Files
+	// section; mediaVer retriggers the listing after an upload.
+	let mediaVer = $state(0);
+	let uploadBusy = $state(false);
+	let dragOverFiles = $state(false);
+	let recordFileInput = $state<HTMLInputElement | null>(null);
+	async function uploadRecordFiles(list: FileList | null | undefined) {
+		if (!list?.length) return;
+		uploadBusy = true;
+		try {
+			const fd = new FormData();
+			for (const f of list) fd.append('files', f);
+			const res = await fetch(`${base}/upload`, { method: 'POST', body: fd });
+			if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+			const { saved } = (await res.json()) as { saved: string[] };
+			toast.success(saved.length === 1 ? `Added ${saved[0]}` : `Added ${saved.length} files`);
+			mediaVer++;
+		} catch (e) {
+			toast.error('Upload failed', { description: String(e) });
+		} finally {
+			uploadBusy = false;
+		}
+	}
+
 	$effect(() => {
 		if (!folderPath) {
 			media = [];
 			return;
 		}
+		mediaVer; // refetch after uploads
 		lightbox = null;
 		const url = `/${data.moduleKey}/${item.id}/files`;
 		let cancelled = false;
@@ -121,25 +282,6 @@
 			cancelled = true;
 		};
 	});
-
-	let saving = $state(false);
-
-	const onSave: SubmitFunction = () => {
-		saving = true;
-		return async ({ result, update }) => {
-			saving = false;
-			if (result.type === 'success') {
-				await update({ reset: false });
-				toast.success('Saved');
-			} else if (result.type === 'failure') {
-				toast.error(String(result.data?.message ?? 'Save failed'));
-			} else if (result.type === 'error') {
-				toast.error('Request failed');
-			} else {
-				await update();
-			}
-		};
-	};
 
 	const onDelete: SubmitFunction = ({ cancel }) => {
 		if (!confirm(`Delete this ${mod.singular}?`)) {
@@ -224,17 +366,54 @@
 
 	<div class="mt-8 flex flex-col gap-8">
 	{#if folderPath}
-		<section class="flex flex-col gap-3">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<section
+			class="flex flex-col gap-3 rounded-[12px] {dragOverFiles
+				? 'outline-dashed outline-2 outline-signal/60'
+				: ''}"
+			ondragover={(e) => {
+				e.preventDefault();
+				dragOverFiles = true;
+			}}
+			ondragleave={() => (dragOverFiles = false)}
+			ondrop={(e) => {
+				e.preventDefault();
+				dragOverFiles = false;
+				uploadRecordFiles(e.dataTransfer?.files);
+			}}
+		>
+			<input
+				type="file"
+				multiple
+				hidden
+				bind:this={recordFileInput}
+				onchange={(e) => {
+					const input = e.currentTarget as HTMLInputElement;
+					uploadRecordFiles(input.files);
+					input.value = '';
+				}}
+			/>
 			<div class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
 				<span>Files</span>
 				{#if media.length}<span>· {media.length}{mediaCapped ? '+' : ''}</span>{/if}
+				<button
+					type="button"
+					onclick={() => recordFileInput?.click()}
+					disabled={uploadBusy}
+					title="Add files to this record's folder (or drop them on this section)"
+					class="ml-2 cursor-pointer rounded-[6px] border px-2 py-1 text-[10px] normal-case tracking-normal text-muted-foreground hover:border-ring/40 hover:text-foreground/80 disabled:opacity-50"
+				>
+					{uploadBusy ? 'Adding…' : '+ Add files'}
+				</button>
 			</div>
 			{#if mediaLoading}
 				<p class="font-mono text-xs text-muted-foreground">Scanning folder…</p>
 			{:else if mediaError}
 				<p class="font-mono text-xs text-destructive">Couldn't read the folder — is the drive mounted?</p>
 			{:else if !media.length}
-				<p class="font-mono text-xs text-muted-foreground">No previewable images, video, or audio in this folder.</p>
+				<p class="font-mono text-xs text-muted-foreground">
+					No previewable media yet — drop files here or use “+ Add files”.
+				</p>
 			{:else}
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
 					{#each media as m (m.rel)}
@@ -288,10 +467,85 @@
 		</section>
 	{/if}
 
+	{#if photoUrl || productLinks.length}
+		<div class="flex max-w-5xl items-center gap-5 rounded-[12px] border bg-card px-6 py-4">
+			{#if photoUrl}
+				<img
+					src={photoUrl}
+					alt={title}
+					class="max-h-40 max-w-[220px] rounded-lg border bg-background object-contain"
+				/>
+			{/if}
+			{#if productLinks.length}
+				<div class="flex flex-wrap gap-2">
+					{#each productLinks as [label, url] (label)}
+						<a
+							href={url}
+							target="_blank"
+							rel="noreferrer"
+							class="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 font-mono text-[11px] text-foreground/80 transition-colors hover:border-ring/40 hover:text-signal"
+						>
+							{label} ↗
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Click delegation catches edits that only move hidden inputs (tag
+	     chips, calendar picks); the snapshot diff makes no-op checks free. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+	<form
+		id="record-form"
+		method="POST"
+		action="?/update"
+		class="flex flex-col gap-8"
+		oninput={() => scheduleSave()}
+		onchange={() => {
+			syncKind();
+			scheduleSave();
+		}}
+		onclick={() => scheduleSave()}
+		onsubmit={(e) => {
+			e.preventDefault();
+			flushNow();
+		}}
+	>
 	{#if mod.docField}
-		<section class="flex max-w-2xl flex-col gap-3 rounded-[12px] border bg-card px-6 py-5">
+		<input type="hidden" name={mod.docField} value={bodyText} />
+	{/if}
+
+	{#if stripFields.length}
+		<section class="flex max-w-5xl flex-col gap-3 rounded-[12px] border bg-card px-6 py-4">
+			{#key item.id}
+				<ModuleFields
+					fields={stripFields}
+					{item}
+					relationOptions={data.relationOptions}
+					layout="row"
+				/>
+			{/key}
+		</section>
+	{/if}
+
+	{#if mod.docField}
+		<section class="flex max-w-5xl flex-col gap-3 rounded-[12px] border bg-card px-6 py-5">
 			<div class="flex items-center justify-between">
-				<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DOCUMENT</div>
+				<div class="flex items-center gap-3">
+					<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DOCUMENT</div>
+					<div class="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+						<span
+							class={cn(
+								'size-1.5 rounded-full',
+								saveState === 'saved' && 'bg-[#2f7d5b]',
+								saveState === 'error' && 'bg-destructive',
+								(saveState === 'pending' || saveState === 'saving') && 'animate-pulse bg-signal'
+							)}
+						></span>
+						{saveLabel[saveState]}
+					</div>
+				</div>
 				<div class="inline-flex gap-0.5 rounded-[8px] bg-muted p-[3px]">
 					<button
 						type="button"
@@ -312,6 +566,7 @@
 			{#if docTab === 'md'}
 				<textarea
 					bind:value={bodyText}
+					oninput={() => scheduleSave()}
 					onkeydown={(e) => {
 						if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
 							e.preventDefault();
@@ -324,49 +579,60 @@
 				></textarea>
 			{:else}
 				{#key `${item.id}:${docTab}`}
-					<NoteEditor value={bodyText} onchange={(md) => (bodyText = md)} onsave={saveDoc} />
+					<NoteEditor
+						value={bodyText}
+						onchange={(md) => {
+							bodyText = md;
+							scheduleSave();
+						}}
+						onsave={saveDoc}
+					/>
 				{/key}
 			{/if}
 			<div class="font-mono text-[10px] text-muted-foreground">
-				Type '/' for blocks · markdown shortcuts as you type · Cmd/Ctrl+Enter saves
+				Type '/' for blocks · markdown shortcuts as you type · saves automatically
 			</div>
 		</section>
 	{/if}
 
-	<section class="flex max-w-2xl flex-col gap-4 rounded-[12px] border bg-card px-6 py-5">
+	<section class="flex max-w-5xl flex-col gap-4 rounded-[12px] border bg-card px-6 py-5">
 		<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DETAILS</div>
-		<form id="record-form" method="POST" action="?/update" use:enhance={onSave}>
-			{#if mod.docField}
-				<input type="hidden" name={mod.docField} value={bodyText} />
-			{/if}
-			{#key item.id}
-				<ModuleFields
-					fields={mod.fields}
-					{item}
-					relationOptions={data.relationOptions}
-					tagSuggestions={data.tagSuggestions}
-					exclude={mod.docField ? [mod.docField] : []}
-				/>
-			{/key}
-		</form>
-		<div class="flex items-center justify-between gap-2 border-t pt-4">
-			<form method="POST" action="?/delete" use:enhance={onDelete}>
-				<Button type="submit" variant="destructive" size="sm">
-					<Trash2 class="size-4" /> Delete
-				</Button>
-			</form>
-			<div class="flex gap-2">
-				<Button href={`/${mod.key}`} variant="outline">Cancel</Button>
-				<Button type="submit" form="record-form" disabled={saving}>
-					{saving ? 'Saving…' : 'Save changes'}
-				</Button>
-			</div>
-		</div>
+		{#key item.id}
+			<ModuleFields
+				fields={mod.fields}
+				{item}
+				relationOptions={data.relationOptions}
+				tagSuggestions={data.tagSuggestions}
+				suggestionsByField={data.attendeeSuggestions ? { attendees: data.attendeeSuggestions } : {}}
+				exclude={detailExclude}
+			/>
+		{/key}
 	</section>
+	</form>
+
+	<div class="flex max-w-5xl items-center justify-between gap-2 border-t pt-4">
+		<form method="POST" action="?/delete" use:enhance={onDelete}>
+			<Button type="submit" variant="destructive" size="sm">
+				<Trash2 class="size-4" /> Delete
+			</Button>
+		</form>
+		<div class="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+			<span
+				class={cn(
+					'size-1.5 rounded-full',
+					saveState === 'saved' && 'bg-[#2f7d5b]',
+					saveState === 'error' && 'bg-destructive',
+					(saveState === 'pending' || saveState === 'saving') && 'animate-pulse bg-signal'
+				)}
+			></span>
+			{saveLabel[saveState]}
+		</div>
+	</div>
 	</div>
 </div>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onpagehide={() => flushNow(true)} />
+<svelte:document onvisibilitychange={onLifecycleHide} />
 
 {#if lightbox !== null && images[lightbox]}
 	{@const cur = images[lightbox]}

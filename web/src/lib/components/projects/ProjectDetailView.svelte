@@ -90,6 +90,24 @@
 	let personSel = $state('');
 	let personDraft = $state('');
 
+	// Add-files: hidden picker + drag-drop target state for the FILES card.
+	let fileInput = $state<HTMLInputElement | null>(null);
+	let dragOver = $state(false);
+	function onFilesPicked(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		if (input.files?.length) void t.uploadFiles(p.id, input.files);
+		input.value = '';
+	}
+	function onFilesDrop(e: DragEvent) {
+		e.preventDefault();
+		dragOver = false;
+		if (!p.path) {
+			t.openPicker(p.id);
+			return;
+		}
+		if (e.dataTransfer?.files?.length) void t.uploadFiles(p.id, e.dataTransfer.files);
+	}
+
 	function submitTask() {
 		if (!taskDraft.title.trim()) return;
 		void t.addTask(p.id, taskDraft.title, taskDraft.due);
@@ -917,7 +935,17 @@
 		{/snippet}
 
 		{#snippet filesC()}
-			<div class={cardClass}>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="{cardClass} {dragOver ? 'outline-dashed outline-2 outline-signal/60' : ''}"
+				ondragover={(e) => {
+					e.preventDefault();
+					dragOver = true;
+				}}
+				ondragleave={() => (dragOver = false)}
+				ondrop={onFilesDrop}
+			>
+				<input type="file" multiple hidden bind:this={fileInput} onchange={onFilesPicked} />
 				<div class="{sectionLabel} mb-1.5 flex items-center gap-2">
 					{fam === 'visual' ? 'MEDIA' : 'FILES'}
 					{#if t.watching}
@@ -925,6 +953,30 @@
 							<span class="size-1.5 animate-pulse rounded-full bg-[#2f7d5b]"></span>LIVE
 						</span>
 					{/if}
+					<span class="ml-auto flex gap-1">
+						{#if p.path}
+							<button
+								onclick={() => fileInput?.click()}
+								disabled={t.uploading}
+								title="Add files to this project's folder (or drop them on this card)"
+								class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80 disabled:opacity-50"
+								>{t.uploading ? 'ADDING…' : '+ ADD FILES'}</button
+							>
+							<button
+								onclick={() => t.openLocal(p.id)}
+								title="Open the linked folder in your file manager"
+								class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+								>OPEN</button
+							>
+						{:else}
+							<button
+								onclick={() => t.openPicker(p.id)}
+								title="Link this project to a folder"
+								class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+								>LINK FOLDER</button
+							>
+						{/if}
+					</span>
 				</div>
 				{#if gridFiles.length}
 					<div class="mb-2 grid grid-cols-3 gap-2.5 pt-1.5 sm:grid-cols-4">
@@ -970,13 +1022,13 @@
 					{#if !gridFiles.length}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
 							{#if p.path}
-								No previewable files in this folder.
+								No files yet — drop them on this card, or use <span class="font-mono text-[11px]">+ ADD FILES</span>.
 							{:else}
 								<button
 									onclick={() => t.openPicker(p.id)}
 									class="cursor-pointer underline decoration-dotted underline-offset-4 hover:text-foreground/80"
 									>Link a folder</button
-								> to preview its files here.
+								> to add and preview files here.
 							{/if}
 						</div>
 					{/if}

@@ -50,7 +50,7 @@ export const SLASH_ITEMS: SlashItem[] = [
 	{
 		title: 'To-do list',
 		hint: '[ ] ',
-		keywords: 'todo task check checkbox',
+		keywords: 'todo task check checkbox [] [ ] tasks',
 		run: (e, r) => chain(e, r).toggleTaskList().run()
 	},
 	{
