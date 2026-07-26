@@ -1,7 +1,17 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { bytes, since, LEVEL_COLOR, LEVEL_LABEL, LEVEL_RANK, type Level } from '$lib/admin';
+	import {
+		ago,
+		bytes,
+		since,
+		CHECK_LABELS,
+		CHECK_LEVEL,
+		LEVEL_COLOR,
+		LEVEL_LABEL,
+		LEVEL_RANK,
+		type Level
+	} from '$lib/admin';
 	import PageHeader from '$lib/components/chrome/PageHeader.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -47,12 +57,34 @@
 		}
 	]);
 
+	// The self-check results, worst first. `check.run` is the runner's own
+	// summary line rather than a check, so it's pulled out to date the run
+	// instead of being listed alongside the things it summarises.
+	const lastRun = $derived(data.log?.checks?.['check.run'] ?? null);
+	const checks = $derived.by(() => {
+		const all = Object.entries(data.log?.checks ?? {})
+			.filter(([event]) => event !== 'check.run')
+			.map(([event, entry]) => ({
+				name: event.replace(/^check\./, ''),
+				label: CHECK_LABELS[event.replace(/^check\./, '')] ?? event,
+				level: CHECK_LEVEL[entry.detail?.status ?? ''] ?? ('unknown' as Level),
+				message: entry.message,
+				at: entry.at
+			}));
+		return all.sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level]);
+	});
+	const failingChecks = $derived(checks.filter((c) => c.level !== 'ok').length);
+
+	// The headline counts the recorded checks alongside the live readings. A
+	// page that says "all systems nominal" directly above a warning check is
+	// worse than no headline at all.
 	const worst = $derived.by(() => {
 		const levels: Level[] = [
 			...services.map((s) => s.level),
 			host.backups.state as Level,
 			...host.disks.map((d) => d.state as Level),
-			(db?.ok ? 'ok' : 'down') as Level
+			(db?.ok ? 'ok' : 'down') as Level,
+			...checks.map((c) => c.level)
 		];
 		return levels.sort((a, b) => LEVEL_RANK[a] - LEVEL_RANK[b])[0] ?? 'unknown';
 	});
@@ -60,7 +92,8 @@
 	const problems = $derived(
 		services.filter((s) => s.level !== 'ok').length +
 			(host.backups.state !== 'ok' ? 1 : 0) +
-			host.disks.filter((d) => d.state !== 'ok').length
+			host.disks.filter((d) => d.state !== 'ok').length +
+			failingChecks
 	);
 
 	const paths = $derived(form?.paths ?? null);
@@ -110,6 +143,56 @@
 			</Button>
 		{/snippet}
 	</PageHeader>
+
+	<!-- Self-checks. Everything below this card is a live reading taken when the
+	     page loaded; this is the standing record, written every 15 minutes by
+	     base-selfcheck.timer whether or not anyone is looking. -->
+	<div class={`${card} mb-4`}>
+		<div class={cardHead}>
+			<span class="flex items-center gap-2">
+				{@render dot(
+					(checks.length === 0
+						? 'unknown'
+						: checks.some((c) => c.level === 'down')
+							? 'down'
+							: failingChecks
+								? 'warn'
+								: 'ok') as Level
+				)}
+				Self-checks
+			</span>
+			<span class="normal-case tracking-normal">
+				{#if lastRun}
+					ran {ago(lastRun.at)} · every 15 min
+				{:else}
+					never run
+				{/if}
+			</span>
+		</div>
+		{#if checks.length === 0}
+			<p class="px-5 py-4 text-[13px] text-muted-foreground">
+				No results yet. The timer runs every 15 minutes, or run it now:
+				<code class="font-mono text-[12px]">
+					~/base/.venv/bin/python ~/base/scripts/selfcheck.py
+				</code>
+			</p>
+		{:else}
+			<div class="divide-y">
+				{#each checks as c (c.name)}
+					<div class="flex items-baseline gap-3 px-5 py-2.5">
+						{@render dot(c.level)}
+						<span class="w-56 shrink-0 text-[13px] font-medium">{c.label}</span>
+						<span class="min-w-0 flex-1 text-[12px] text-muted-foreground">{c.message}</span>
+					</div>
+				{/each}
+			</div>
+			<p class="border-t px-5 py-2.5 font-mono text-[11px] text-muted-foreground">
+				{checks.length} checks · {failingChecks || 'none'}
+				{failingChecks ? 'needing attention' : 'failing'} · a new failure raises a desktop
+				notification
+			</p>
+		{/if}
+	</div>
 
 	<!-- Services: the four processes base needs to be alive. -->
 	<div class="mb-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">

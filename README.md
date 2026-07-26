@@ -89,6 +89,68 @@ Broken paths are grouped by the missing directory they share, so an unplugged
 drive reads as one fault ("`/media/robotblood/Main HD` — 71 rows need it")
 rather than 71 unrelated ones.
 
+**Self-checks and the system log.** `base-selfcheck.timer` runs
+`scripts/selfcheck.py` every 15 minutes. Each check in `app/checks.py` answers
+one question and returns ok / warn / fail; results are appended to the
+`system_log` table and shown at the top of `/admin/health`.
+
+```bash
+~/base/.venv/bin/python ~/base/scripts/selfcheck.py         # run now
+~/base/.venv/bin/python ~/base/scripts/selfcheck.py --quiet # no notification
+```
+
+The checks: services active, API+database responding, **dashboard routes**
+(fetches real pages and asserts 200), **build current** (is `web/build` newer
+than the running `base-web`?), **module registry** (do `app/main.py`,
+`web/src/lib/modules.ts` and the live `/stats` agree?), backup freshness, disk
+headroom, linked folders.
+
+Those middle three exist because of failures that actually happened here: a
+rebuild landing under a running server leaves adapter-node reaching for hashed
+chunks that no longer exist, so pages 500 one at a time with nothing to
+announce it — and a module added to the backend but not the frontend, or not
+yet restarted into, is silently absent rather than obviously broken.
+
+A check that changes from passing to failing raises a desktop notification via
+`notify-send`; a check that is *still* failing does not, so an unplugged drive
+doesn't nag every quarter hour. Recovery notifies once too.
+
+The runner is a standalone process, not an API endpoint, for the same reason
+the host probes live in the web layer: it has to be able to report that
+base-api is down.
+
+**System log.** `system_log` in Postgres holds application events — unhandled
+errors from both the API (`app/main.py` exception handler) and the dashboard
+(`web/src/hooks.server.ts`), plus every check result. journald still holds
+process stdout/stderr and rotates it; this table is the queryable half, inside
+the same `pg_dump`. Access-log noise deliberately stays out. Entries expire by
+level (`app/logs.py` `RETENTION_DAYS`), pruned on each check run.
+
+```bash
+curl -s localhost:8000/log?level=warn | jq       # recent problems
+curl -s localhost:8000/log/summary | jq          # counts + latest check results
+curl -s localhost:8000/log/checks?hours=48 | jq  # per-check pass/fail history
+```
+
+**Logs** (`/admin/logs`) browses all of it. Filters (level, source, window,
+message search) live in the URL, so a view is linkable and the server does the
+filtering rather than shipping the whole log to the browser. Clicking an entry
+expands its detail — the traceback for an error, the offending paths for a
+failed check.
+
+The **check history** strip at the top is the thing a live health reading
+cannot give you: one bar per run, oldest to newest, so "the backup is stale"
+becomes "the backup has been stale since Thursday" and a flapping check is
+visible as flapping. Hover a bar for what that run recorded.
+
+The **Journal** tab shells out to `journalctl` for any of the four units — raw
+process output, for when the structured log isn't enough. That pane keeps
+working when the API is down, since it doesn't go through the database.
+
+Note that a web error can only be recorded while the API is up, since the log
+lives behind it. That gap is covered from the other side: `api_responds` is
+itself a check, and the runner needs neither service.
+
 **Design** (`/admin/design`) — the live design system. You author **seven
 colours per mode** (background, surface, text, muted, border, accent,
 on-accent) plus type, corner radius and density; `web/src/lib/design/tokens.ts`

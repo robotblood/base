@@ -20,6 +20,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		label: 'Data',
 		href: '/admin/data',
 		blurb: 'Imported databases that aren’t modelled yet'
+	},
+	{
+		key: 'logs',
+		label: 'Logs',
+		href: '/admin/logs',
+		blurb: 'Errors, check history, and raw service output'
 	}
 ];
 
@@ -39,6 +45,60 @@ export type DbHealth = {
 };
 
 export type ApiHealth = { api: { ok: boolean; version: string }; db: DbHealth };
+
+export type LogEntry = {
+	id: number;
+	at: string;
+	level: 'debug' | 'info' | 'warn' | 'error';
+	source: string;
+	event: string;
+	message: string;
+	detail: Record<string, unknown> & { status?: 'ok' | 'warn' | 'fail' };
+};
+
+/** `/log/summary` — level counts plus the latest result of every self-check,
+ *  keyed by event slug ("check.backup_fresh"). */
+export type LogSummary = {
+	hours: number;
+	counts: Record<'debug' | 'info' | 'warn' | 'error', number>;
+	problems: number;
+	checks: Record<string, LogEntry>;
+};
+
+export type CheckPoint = { at: string; status: 'ok' | 'warn' | 'fail'; message: string };
+
+/** `/log/checks` — per-check pass/fail series, oldest first. */
+export type CheckHistory = {
+	hours: number;
+	sources: string[];
+	series: Record<string, CheckPoint[]>;
+};
+
+/** Log levels as display colours, reusing the health page's severity palette. */
+export const LOG_LEVEL: Record<string, Level> = {
+	debug: 'unknown',
+	info: 'ok',
+	warn: 'warn',
+	error: 'down'
+};
+
+// A check's own status word, which is finer than the log level it was written
+// at: "warn" and "fail" both land in the log as problems, but only one of them
+// means something is actually broken.
+export const CHECK_LEVEL: Record<string, Level> = { ok: 'ok', warn: 'warn', fail: 'down' };
+
+/** Friendlier names than the function slugs the runner writes. */
+export const CHECK_LABELS: Record<string, string> = {
+	services: 'Services active',
+	api_responds: 'API and database',
+	web_routes: 'Dashboard routes',
+	build_current: 'Build matches running server',
+	module_registry: 'Module registry in sync',
+	backup_fresh: 'Backup freshness',
+	disk: 'Disk headroom',
+	linked_folders: 'Linked folders',
+	run: 'Last run'
+};
 
 export type BrokenPath = { id: number; label: string | null; path: string };
 
@@ -88,6 +148,13 @@ export function bytes(n: number | null | undefined): string {
 		i++;
 	}
 	return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
+/** `since()` with an "ago" suffix, except where it would read wrong —
+ *  "just now ago" and "— ago" are not sentences. */
+export function ago(iso: string | null | undefined, now = Date.now()): string {
+	const text = since(iso, now);
+	return text === 'just now' || text === '—' || text.startsWith('in ') ? text : `${text} ago`;
 }
 
 /** "3d 4h", "6h 12m", "just now" — uptime and age in one glance. */

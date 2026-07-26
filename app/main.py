@@ -1,10 +1,12 @@
+import traceback
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, func, select
 
-from app import models
+from app import logs, models
 from app.db import engine, init_db
 from app.health import db_health, path_health
 from app.routers import make_crud_router
@@ -65,6 +67,70 @@ def health_paths():
     """Rows whose on-disk `path` no longer exists. Hits the filesystem — the
     admin page loads it on demand rather than with every health poll."""
     return path_health(PATH_MODULES)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception):
+    """Record anything that escapes a route before returning the 500.
+
+    Without this an API error exists only as a uvicorn traceback in journald —
+    real, but invisible unless you already suspected something was wrong.
+    """
+    logs.log(
+        "http.error",
+        f"{type(exc).__name__}: {exc}",
+        level="error",
+        source="api",
+        detail={
+            "method": request.method,
+            "path": request.url.path,
+            "traceback": traceback.format_exc()[-4000:],
+        },
+    )
+    return JSONResponse({"detail": "internal server error"}, status_code=500)
+
+
+@app.get("/log")
+def get_log(
+    level: str | None = Query(default=None, description="this level or worse"),
+    source: str | None = None,
+    event: str | None = None,
+    q: str | None = Query(default=None, description="substring of the message"),
+    since_hours: int | None = None,
+    limit: int = 200,
+):
+    """Recent system log entries, newest first."""
+    return logs.read(
+        level=level, source=source, event=event, q=q, since_hours=since_hours, limit=limit
+    )
+
+
+@app.get("/log/checks")
+def log_check_history(hours: int = 48):
+    """Per-check pass/fail history — the trend a live health reading can't show."""
+    return {"hours": hours, "sources": logs.sources(), "series": logs.check_history(hours)}
+
+
+@app.post("/log", status_code=204)
+def post_log(entry: dict):
+    """Append an entry. Used by the web layer and the shell scripts, which have
+    no database connection of their own."""
+    logs.log(
+        str(entry.get("event", "")),
+        str(entry.get("message", "")),
+        level=str(entry.get("level", "info")),
+        source=str(entry.get("source", "api")),
+        detail=entry.get("detail") if isinstance(entry.get("detail"), dict) else {},
+    )
+
+
+@app.get("/log/summary")
+def log_summary(hours: int = 24):
+    """Counts by level over a window, plus the latest result of every check."""
+    return {
+        **logs.summary(hours),
+        "checks": logs.latest_by_event("check."),
+    }
 
 
 @app.get("/settings/{key}")

@@ -1,0 +1,13 @@
+[Unit]
+Description=base — run the system self-checks
+# Nothing is required here: reporting that base-api or Postgres is down is the
+# job, so the check has to run whether or not they are up.
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/base
+ExecStart=%h/base/.venv/bin/python %h/base/scripts/selfcheck.py
+# selfcheck exits non-zero when a check fails. That is a finding, not a unit
+# failure — leaving it unmasked would put base-selfcheck.service itself into
+# the failed state that check_services then reports on.
+SuccessExitStatus=0 1

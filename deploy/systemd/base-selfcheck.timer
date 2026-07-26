@@ -1,0 +1,13 @@
+[Unit]
+Description=base — self-checks every 15 minutes
+
+[Timer]
+# A few minutes after login so the services have settled, then quarter-hourly.
+OnStartupSec=3min
+OnUnitActiveSec=15min
+# Not Persistent: a missed window while the machine was off says nothing about
+# the machine now, and catching up would only write stale results.
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

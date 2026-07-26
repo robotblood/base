@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { hostHealth } from '$lib/server/host';
-import type { ApiHealth, PathHealth } from '$lib/admin';
+import type { ApiHealth, LogSummary, PathHealth } from '$lib/admin';
 import type { Actions, PageServerLoad } from './$types';
 
 const API = env.API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -22,8 +22,12 @@ async function apiHealth<T>(path: string, timeoutMs = 4000): Promise<T | null> {
 }
 
 export const load: PageServerLoad = async () => {
-	const [host, api] = await Promise.all([hostHealth(), apiHealth<ApiHealth>('/health')]);
-	return { host, api, apiBase: API };
+	const [host, api, log] = await Promise.all([
+		hostHealth(),
+		apiHealth<ApiHealth>('/health'),
+		apiHealth<LogSummary>('/log/summary')
+	]);
+	return { host, api, log, apiBase: API };
 };
 
 export const actions: Actions = {

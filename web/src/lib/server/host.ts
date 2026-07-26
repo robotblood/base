@@ -297,6 +297,38 @@ async function cacheHealth(): Promise<CacheHealth> {
 	return { dir: CACHE_DIR, bytes: sizes.reduce((a, b) => a + b, 0), files: files.length };
 }
 
+export const JOURNAL_UNITS = [
+	{ unit: 'base-api', label: 'API' },
+	{ unit: 'base-web', label: 'Web' },
+	{ unit: 'base-selfcheck', label: 'Self-checks' },
+	{ unit: 'base-backup', label: 'Backups' }
+];
+
+export type JournalTail = { unit: string; lines: string[]; error?: string };
+
+/** Raw stdout/stderr for a unit — the half of the story Postgres doesn't hold.
+ *
+ *  Loaded only when the journal view is open: shelling out to journalctl for
+ *  four units on every page load would be a needless second or so on a page
+ *  whose default view doesn't show any of it. */
+export async function journalTail(unit: string, lines = 200): Promise<JournalTail> {
+	if (!JOURNAL_UNITS.some((u) => u.unit === unit)) {
+		return { unit, lines: [], error: 'unknown unit' };
+	}
+	const out = await sh('journalctl', [
+		'--user',
+		'-u',
+		unit,
+		'-n',
+		String(Math.min(lines, 1000)),
+		'--no-pager',
+		'-o',
+		'short-iso'
+	]);
+	if (out === null) return { unit, lines: [], error: 'journalctl unavailable' };
+	return { unit, lines: out.split('\n').filter(Boolean) };
+}
+
 export type HostHealth = {
 	units: UnitHealth[];
 	container: ContainerHealth;
