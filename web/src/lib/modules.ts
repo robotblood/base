@@ -31,7 +31,9 @@ export const MODULES: ModuleConfig[] = [
 				label: 'Status',
 				type: 'select',
 				// Matches the vocabulary the Notion import actually wrote.
-				options: ['Not started', 'In progress', 'Done', 'Draft', 'Submitted']
+				// 'Archived' closes a row out without deleting it — work that isn't
+				// yours any more, kept as a record.
+				options: ['Not started', 'In progress', 'Done', 'Draft', 'Submitted', 'Archived']
 			},
 			{ name: 'project_id', label: 'Project', type: 'relation', ref: 'projects' },
 			{ name: 'priority', label: 'Priority', type: 'text' },
@@ -45,13 +47,14 @@ export const MODULES: ModuleConfig[] = [
 		dateField: 'due',
 		overdueField: 'due',
 		statusField: 'status',
-		doneValues: ['Done'],
+		doneValues: ['Done', 'Archived'],
 		statusColors: {
 			'Not started': STATE.idle,
 			'In progress': STATE.progress,
 			Done: STATE.done,
 			Draft: STATE.muted,
-			Submitted: STATE.good
+			Submitted: STATE.good,
+			Archived: STATE.muted
 		},
 		defaultSort: { field: 'due', dir: 'asc' }
 	},

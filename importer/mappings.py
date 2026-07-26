@@ -45,11 +45,16 @@ SPECS: list[Spec] = [
          {"assignee": "Assignee", "status": "Status", "priority": "Priority",
           "due": lambda r: nd.parse_date(r.get("Due date"))},
          tags_from="Tags"),
+    # A closed chapter: the EIPA helpdesk queue. The CSV's own statuses
+    # (Submitted, Draft, ...) describe a job that ended, so every row lands
+    # Archived rather than re-entering the live queue on each import. The
+    # original status survives in `raw`.
     Spec("IT Issue Tracker", f"{RB}/IT Issue Tracker/IT Issue Tracker 121842a197ea81cf8e5cd1d36e926c55_all.csv",
          models.Todo, ["Name"],
-         {"assignee": "Assignee", "status": "Status", "priority": "Priority",
+         {"assignee": "Assignee", "priority": "Priority",
           "due": lambda r: nd.parse_date(r.get("Due"))},
-         tags_from="Ticket Type"),
+         tags_from="Ticket Type", extra_tags=["EIPA"],
+         defaults={"status": "Archived"}),
 
     # ---- NOTES & MEETINGS ---------------------------------------------
     Spec("Notes and Meetings", f"{PS}/Admin/Notes and Meetings 297a46c489ca47c591219dc3dc4f2f36_all.csv",

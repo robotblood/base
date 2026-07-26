@@ -204,6 +204,10 @@ def _brief(obj, fields: tuple[str, ...]) -> dict:
 
 # Project statuses that mean "not a live thread any more".
 _PROJECT_CLOSED = ["done", "archived", "complete", "completed", "cancelled"]
+# The same idea for todos — mirrors `doneValues` for todos in
+# web/src/lib/modules.ts, so the counts here match what the list shows.
+# Archived is work that closed out without being finished.
+_TODO_CLOSED = ["done", "archived"]
 # Phases seeded by a kind preset but never named carry no information, so they
 # don't get to be a project's "next action".
 _PLACEHOLDER_PHASE = {"", "new phase", "untitled"}
@@ -235,7 +239,7 @@ def dashboard():
     today = date.today()
     now = datetime.now()
     T, E, N, P = models.Todo, models.Event, models.Note, models.Project
-    not_done = func.lower(func.coalesce(T.status, "")) != "done"
+    not_done = func.lower(func.coalesce(T.status, "")).not_in(_TODO_CLOSED)
 
     with Session(engine) as session:
         projects = session.exec(

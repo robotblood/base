@@ -133,6 +133,12 @@ def main() -> None:
             c, u = import_spec(session, root, spec)
             total_c += c
             total_u += u
+        # Sections that are pages rather than databases (see
+        # importer/sections.py) — each becomes a project with linked notes.
+        from importer.sections import import_sections
+
+        import_sections(session, root, set(args.only) if args.only else None)
+
         # Documents written inside a note's page (see importer/subpages.py).
         # Runs after the rows exist, since each child needs its parent.
         from importer.subpages import import_subpages
