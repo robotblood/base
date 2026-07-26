@@ -1,0 +1,12 @@
+[Unit]
+Description=base — daily database snapshot
+
+[Timer]
+# Daily, but Persistent means a missed run (machine off) fires on next login
+# rather than being skipped — the usual case on a desktop.
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

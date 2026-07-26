@@ -1,0 +1,10 @@
+[Unit]
+Description=base — database snapshot
+# Postgres runs in Docker; backup.sh waits up to 60s for it and exits non-zero
+# if it never appears, which the timer's next run recovers from.
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/base/scripts/backup.sh
+WorkingDirectory=%h/base

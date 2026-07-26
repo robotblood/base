@@ -63,6 +63,31 @@ journalctl --user -u base-web -u base-api -f   # logs
 systemctl --user restart base-web              # after a rebuild
 ```
 
+## Backups
+
+`install-services.sh` also enables **base-backup.timer** — a daily `pg_dump`
+into `~/backups/base` (30 daily snapshots, plus the first of each month kept
+for a year). `Persistent=true`, so a day the machine was off is caught up at
+next login rather than skipped.
+
+```bash
+bash ~/base/scripts/backup.sh          # snapshot now
+bash ~/base/scripts/restore.sh --list  # what's available
+bash ~/base/scripts/restore.sh         # restore the newest (asks to confirm)
+bash ~/base/scripts/restore.sh ~/backups/base/base-20260726-120000.dump
+systemctl --user list-timers base-backup.timer
+```
+
+Restoring stops `base-api` first and dumps the current state to a
+`pre-restore-*.dump` before replacing anything, so a restore of the wrong
+snapshot is itself undoable. Dumps are `pg_dump -Fc`, so `pg_restore -l` lists
+their contents and single tables can be pulled out of one.
+
+The dumps live on the same machine as the database — that covers the failure
+modes that actually happen (a bad migration, a mistaken bulk edit, a dropped
+table), but not the disk dying. Copying `~/backups/base` somewhere else is
+still worth doing.
+
 ## Development
 
 ```bash

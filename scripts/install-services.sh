@@ -12,18 +12,24 @@ mkdir -p "$UNIT_DIR" "$APP_DIR" "$ICON_DIR"
 
 cp "$PROJECT_DIR"/deploy/systemd/base-api.service "$UNIT_DIR/"
 cp "$PROJECT_DIR"/deploy/systemd/base-web.service "$UNIT_DIR/"
+cp "$PROJECT_DIR"/deploy/systemd/base-backup.service "$UNIT_DIR/"
+cp "$PROJECT_DIR"/deploy/systemd/base-backup.timer "$UNIT_DIR/"
 cp "$PROJECT_DIR"/deploy/base.desktop "$APP_DIR/"
 cp "$PROJECT_DIR"/web/src/lib/assets/favicon.svg "$ICON_DIR/base.svg"
 
-chmod +x "$PROJECT_DIR"/scripts/api-serve.sh "$PROJECT_DIR"/scripts/web-serve.sh
+chmod +x "$PROJECT_DIR"/scripts/api-serve.sh "$PROJECT_DIR"/scripts/web-serve.sh \
+         "$PROJECT_DIR"/scripts/backup.sh "$PROJECT_DIR"/scripts/restore.sh
 
 systemctl --user daemon-reload
 systemctl --user enable base-api.service base-web.service
 systemctl --user restart base-api.service base-web.service
+# The timer only needs enabling (it starts the service on schedule).
+systemctl --user enable --now base-backup.timer
 
 command -v update-desktop-database >/dev/null && update-desktop-database "$APP_DIR" || true
 
 echo "Installed. Web: http://localhost:3000 (base-web) · API: http://127.0.0.1:8000 (base-api)"
+echo "Backups: daily to ~/backups/base (base-backup.timer) · restore: bash scripts/restore.sh --list"
 echo "Logs:   journalctl --user -u base-web -u base-api -f"
 echo "Note:   'bash scripts/dev.sh' needs port 8000 — stop the service first:"
 echo "        systemctl --user stop base-api"
