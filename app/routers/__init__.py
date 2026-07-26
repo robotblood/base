@@ -10,7 +10,7 @@ SQLModel table. Each gives:
     DELETE /<name>/{id}       delete
 """
 
-from typing import Type
+from typing import Callable, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
@@ -23,7 +23,15 @@ _PROTECTED = {"id", "created_at", "updated_at"}
 
 
 def make_crud_router(
-    model: Type, name: str, title_field: str, order_by: str | None = None, desc: bool = False
+    model: Type,
+    name: str,
+    title_field: str,
+    order_by: str | None = None,
+    desc: bool = False,
+    # Adds read-only fields to a row on the way out — values derived from other
+    # rows rather than stored (see app/inherit.py). Takes the rows and a
+    # session, returns one dict per row.
+    decorate: Callable[[list, Session], list[dict]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix=f"/{name}", tags=[name])
     settable = {f for f in model.model_fields if f not in _PROTECTED}
@@ -48,7 +56,8 @@ def make_crud_router(
         order_col = getattr(model, order_field)
         stmt = stmt.order_by(order_col.desc() if desc else order_col)
         stmt = stmt.offset(offset).limit(limit)
-        return session.exec(stmt).all()
+        rows = session.exec(stmt).all()
+        return decorate(list(rows), session) if decorate else rows
 
     @router.post("", status_code=201)
     def create_item(payload: dict, session: Session = Depends(get_session)):
@@ -66,7 +75,7 @@ def make_crud_router(
         obj = session.get(model, item_id)
         if not obj:
             raise HTTPException(404, "not found")
-        return obj
+        return decorate([obj], session)[0] if decorate else obj
 
     @router.patch("/{item_id}")
     def update_item(item_id: int, payload: dict, session: Session = Depends(get_session)):

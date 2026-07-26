@@ -128,6 +128,11 @@ export interface Thread {
 	status: string | null;
 	health: string | null;
 	due: string | null;
+	// The deadline this thread actually works to: its own, or the nearest
+	// ancestor's. `due_from` names that ancestor, and is null when the date is
+	// the project's own.
+	due_effective: string | null;
+	due_from: string | null;
 	next_action: string | null;
 	counts: { tasks: number; notes: number; shows: number };
 	shows: ThreadShow[];

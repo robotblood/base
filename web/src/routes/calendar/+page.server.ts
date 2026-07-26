@@ -61,15 +61,20 @@ export const load: PageServerLoad = async () => {
 			});
 		}
 		for (const p of projects) {
-			const date = day(p.due);
+			// The deadline the project actually works to — its own, or the one it
+			// inherits from the project it hangs under (resolved by the API, see
+			// app/inherit.py). A song with no date of its own still belongs on the
+			// calendar on its album's date.
+			const date = day(p.due_effective ?? p.due);
 			if (!date) continue;
+			const from = p.due_from ? ` · from ${p.due_from}` : '';
 			entries.push({
 				id: `projects:${p.id}`,
 				module: 'projects',
 				title: `${p.name} due`,
 				date,
 				time: null,
-				detail: String(p.status ?? ''),
+				detail: `${String(p.status ?? '')}${from}`,
 				done: ['archived', 'Archive', 'Complete', 'Completed'].includes(String(p.status ?? '')),
 				href: `/projects?open=${p.id}`
 			});

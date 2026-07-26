@@ -9,6 +9,7 @@ from sqlmodel import Session, func, select
 from app import logs, models
 from app.db import engine, init_db
 from app.health import db_health, path_health
+from app.inherit import decorate_projects
 from app.routers import make_crud_router
 
 
@@ -42,9 +43,17 @@ MODULES = [
 # modules whose list should sort by something other than the title column
 ORDER_OVERRIDES = {"events": ("starts_at", True)}  # (field, descending)
 
+# Read-only fields computed from other rows on the way out (app/inherit.py).
+DECORATORS = {"projects": decorate_projects}
+
 for model, name, title_field in MODULES:
     order_by, desc = ORDER_OVERRIDES.get(name, (None, False))
-    app.include_router(make_crud_router(model, name, title_field, order_by=order_by, desc=desc))
+    app.include_router(
+        make_crud_router(
+            model, name, title_field,
+            order_by=order_by, desc=desc, decorate=DECORATORS.get(name),
+        )
+    )
 
 
 # Modules whose rows point at an on-disk folder, for the admin path check.
@@ -292,12 +301,21 @@ def dashboard():
                 entry["advance"] = (e.show or {}).get("advance")
                 shows.setdefault(e.project_id, []).append(entry)
 
+        # Resolve inherited dates once for the whole set, so a child project
+        # counts down to the deadline it actually works to (app/inherit.py).
+        inherited = {row["id"]: row for row in decorate_projects(list(projects), session)}
+
         threads = []
         for p in projects:
             mine = shows.get(p.id, [])
+            resolved = inherited.get(p.id, {})
             threads.append(
                 {
                     **_brief(p, ("id", "name", "kind", "status", "health", "due")),
+                    # What this project is working to, and where it came from —
+                    # null `due_from` means the date is its own.
+                    "due_effective": resolved.get("due_effective"),
+                    "due_from": resolved.get("due_from"),
                     "next_action": _next_action(p.phases),
                     "counts": {
                         "tasks": tasks.get(p.id, 0),

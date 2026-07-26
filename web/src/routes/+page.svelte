@@ -60,11 +60,11 @@
 	const headline = $derived.by(() => {
 		if (!d) return null;
 		const withDue = d.threads
-			.map((t) => ({ t, day: days(t.due) }))
+			.map((t) => ({ t, day: days(t.due_effective ?? t.due) }))
 			.filter((x): x is { t: Thread; day: number } => x.day != null);
 		const late = withDue.filter((x) => x.day < 0).sort((a, b) => a.day - b.day)[0];
 		if (late)
-			return { name: late.t.name, tail: `was due ${relDay(late.t.due).label}`, late: true };
+			return { name: late.t.name, tail: `was due ${relDay(late.t.due_effective ?? late.t.due).label}`, late: true };
 		const next = dated
 			.map((t) => ({ t, day: days(t.opens_at) }))
 			.filter((x): x is { t: Thread; day: number } => x.day != null)
@@ -76,7 +76,12 @@
 				late: false
 			};
 		const soon = withDue.sort((a, b) => a.day - b.day)[0];
-		if (soon) return { name: soon.t.name, tail: `due ${relDay(soon.t.due).label}`, late: false };
+		if (soon)
+			return {
+				name: soon.t.name,
+				tail: `due ${relDay(soon.t.due_effective ?? soon.t.due).label}`,
+				late: false
+			};
 		return null;
 	});
 
@@ -322,7 +327,7 @@
 	{#if plain.length}
 		<div class="mb-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
 			{#each plain as t (t.id)}
-				{@const late = t.due ? relDay(t.due) : null}
+				{@const late = t.due_effective ? relDay(t.due_effective) : null}
 				<a
 					href={`/projects?open=${t.id}`}
 					class="flex flex-col gap-2 rounded-[12px] border bg-card px-5 py-4 transition-colors hover:border-ring/40 hover:bg-accent"
@@ -330,10 +335,14 @@
 					<span class="flex items-baseline justify-between gap-2">
 						<span class={cardLabel}>{kindLabel(t.kind)}</span>
 						{#if late?.label}
+							<!-- An inherited deadline is named, so a date that belongs to
+							     the parent doesn't read as this project's own. -->
 							<span
 								class="font-mono text-[10px] {late.overdue
 									? 'text-destructive'
-									: 'text-muted-foreground'}">{late.label}</span
+									: 'text-muted-foreground'}"
+								title={t.due_from ? `Inherited from ${t.due_from}` : 'This project’s own due date'}
+								>{late.label}{t.due_from ? ` · ${t.due_from}` : ''}</span
 							>
 						{/if}
 					</span>
