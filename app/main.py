@@ -33,6 +33,7 @@ MODULES = [
     (models.Transaction, "transactions", "name"),
     (models.Budget, "budgets", "name"),
     (models.Learning, "learning", "name"),
+    (models.Incident, "incidents", "title"),
     (models.Collection, "collections", "title"),
 ]
 

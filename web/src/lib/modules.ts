@@ -576,6 +576,47 @@ export const MODULES: ModuleConfig[] = [
 		defaultSort: { field: 'name', dir: 'asc' }
 	},
 	{
+		key: 'incidents',
+		label: 'Incidents',
+		singular: 'incident',
+		titleField: 'title',
+		columns: [
+			{ header: 'Incident', field: 'title' },
+			{ header: 'Date', field: 'occurred_on', sort: 'date' },
+			{ header: 'Status', field: 'status', render: 'badge' },
+			{ header: 'Tags', field: 'tags', render: 'tags' },
+			{ header: 'Reported by', field: 'reported_by', hidden: true }
+		],
+		fields: [
+			{ name: 'title', label: 'Incident', type: 'text', required: true },
+			{ name: 'occurred_on', label: 'Date', type: 'date' },
+			{
+				name: 'status',
+				label: 'Status',
+				type: 'select',
+				options: ['Monitoring', 'In Progress', 'Escalated', 'Resolved', 'Closed']
+			},
+			{ name: 'reported_by', label: 'Reported by', type: 'text' },
+			{ name: 'details', label: 'Details', type: 'textarea' },
+			{ name: 'tags', label: 'Tags', type: 'tags' }
+		],
+		views: ['table', 'board', 'group', 'calendar'],
+		groupFields: ['status', 'tags', 'occurred_on'],
+		dateField: 'occurred_on',
+		// The write-up is the record — render it as the page body, like a note.
+		docField: 'details',
+		statusField: 'status',
+		doneValues: ['Resolved', 'Closed'],
+		statusColors: {
+			Monitoring: STATE.progress,
+			'In Progress': STATE.progress,
+			Escalated: STATE.attention,
+			Resolved: STATE.good,
+			Closed: STATE.muted
+		},
+		defaultSort: { field: 'occurred_on', dir: 'desc' }
+	},
+	{
 		key: 'collections',
 		label: 'Collections',
 		singular: 'entry',
@@ -621,5 +662,6 @@ export const MODULE_CODES: Record<string, string> = {
 	transactions: 'TXN',
 	budgets: 'BDGT',
 	learning: 'LRN',
+	incidents: 'INC',
 	collections: 'COLL'
 };

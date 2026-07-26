@@ -25,6 +25,10 @@ class Spec:
     title_cols: list[str]  # first non-empty wins -> title/name field
     fields: dict[str, str | Callable] = field(default_factory=dict)
     tags_from: str | None = None
+    # Tags every row from this database gets, on top of `tags_from`. Provenance
+    # the CSV doesn't carry — an EIPA-era database is EIPA whether or not any
+    # row says so, and re-importing must not drop that.
+    extra_tags: list[str] = field(default_factory=list)
     load_bodies: bool = False
     defaults: dict = field(default_factory=dict)
 
@@ -148,6 +152,17 @@ SPECS: list[Spec] = [
          models.Learning, ["Name"],
          {"status": "Status", "url": "URL", "via": "Source"}, tags_from="Tags"),
 
+    # ---- INCIDENTS -------------------------------------------------------
+    # Every row in this database is from the EIPA years, so provenance is a
+    # property of the database, not of any one row. Tagged here rather than
+    # patched afterwards so re-importing keeps it.
+    Spec("Incident Log",
+         f"{PS}/Admin/Incident Log 9b6d80c502254c7f9500dc66d1620a0e_all.csv",
+         models.Incident, ["Incident"],
+         {"status": "Status", "reported_by": "Reported By", "details": "Details",
+          "occurred_on": lambda r: nd.parse_date(r.get("Date"))},
+         tags_from="Type", extra_tags=["EIPA"]),
+
     # ---- COLLECTIONS -----------------------------------------------------
     # Small databases kept whole rather than modelled. Each row's original
     # columns survive in `raw`; `summary` is just enough to recognise it.
@@ -170,9 +185,6 @@ SPECS: list[Spec] = [
              "Category Name", None),
             ("Sprints", f"{PS}/Admin/Sprints f769f6b15d3246eda38e4fd766817554_all.csv",
              "Sprint name", None),
-            ("Incident Log",
-             f"{PS}/Admin/Incident Log 9b6d80c502254c7f9500dc66d1620a0e_all.csv",
-             "Incident", "Type"),
             ("ADHD Tracker",
              f"{PS}/Admin/ADHD Tracker 12c842a197ea807dafc4d3bf985c8ac2_all.csv",
              "Name", "Tags"),

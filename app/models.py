@@ -213,6 +213,23 @@ class Learning(Base, table=True):
     notes: Optional[str] = None
 
 
+class Incident(Base, table=True):
+    """Something that happened and needed recording — a process failure, an
+    HR matter, a stakeholder problem.
+
+    A live module rather than archive material: the log stays in use, and the
+    entries imported from the EIPA years carry an `EIPA` tag so that batch
+    stays identifiable without walling it off.
+    """
+
+    __tablename__ = "incidents"
+    title: str = Field(index=True)
+    occurred_on: Optional[date] = Field(default=None, index=True)
+    status: Optional[str] = Field(default=None, index=True)
+    reported_by: Optional[str] = None
+    details: Optional[str] = None
+
+
 class Collection(Base, table=True):
     """Small Notion databases kept whole but not yet modelled.
 

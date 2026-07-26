@@ -27,6 +27,7 @@ TITLE_FIELD = {  # which model attr holds the display title
     "hardware": "name", "software": "name", "projects": "name", "people": "name",
     "merch": "name", "applications": "role", "transactions": "name",
     "budgets": "name", "learning": "name", "collections": "title",
+    "incidents": "title",
 }
 
 
@@ -56,8 +57,11 @@ def build_kwargs(spec: Spec, row: dict, bodies: dict[str, str]) -> dict | None:
     kwargs[_title_attr(spec.model)] = title
     for target, extractor in spec.fields.items():
         kwargs[target] = extractor(row) if callable(extractor) else (row.get(extractor) or None)
-    if spec.tags_from:
-        kwargs["tags"] = nd.split_tags(row.get(spec.tags_from))
+    if spec.tags_from or spec.extra_tags:
+        tags = nd.split_tags(row.get(spec.tags_from)) if spec.tags_from else []
+        # Provenance tags go last and never duplicate one the row already had.
+        tags += [t for t in spec.extra_tags if t not in tags]
+        kwargs["tags"] = tags
     if spec.load_bodies:
         body = bodies.get(nd.norm(title))
         if body:
