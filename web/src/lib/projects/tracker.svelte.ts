@@ -4,6 +4,7 @@
 import { goto } from '$app/navigation';
 import { toast } from 'svelte-sonner';
 import { isoToday, type Project, type ProjFile, type Song } from './data';
+import { inheritedPath, wouldCycle } from './inherit';
 import { emptyReady, kindInfo, presetPhases } from './kinds';
 import { mapProject, toProjEvent, toProjNote, toTask } from './map';
 import { persist } from './sync';
@@ -47,6 +48,14 @@ export class Tracker {
 
 	find(id: string): Project | undefined {
 		return this.projects.find((p) => p.id === id);
+	}
+
+	// The folder a project's files actually come from — its own when it has
+	// one, otherwise inherited from the umbrella chain (a song with no folder
+	// reads the album's). The file endpoints resolve the same chain server
+	// side, so anything gated on "does this project have files" asks here.
+	folderOf(id: string): string {
+		return inheritedPath(this.find(id), this.projects).value;
 	}
 
 	// Prepend an activity entry and return a plain snapshot for persisting.
@@ -149,7 +158,7 @@ export class Tracker {
 
 	async loadFiles(id: string, force = false) {
 		const p = this.find(id);
-		if (!p || !p.path || (this.filesLoaded[id] && !force)) return;
+		if (!p || !this.folderOf(id) || (this.filesLoaded[id] && !force)) return;
 		this.filesLoaded[id] = true;
 		try {
 			const res = await fetch(`/projects/${id}/files`);
@@ -182,7 +191,7 @@ export class Tracker {
 	private startWatch(id: string) {
 		this.stopWatch();
 		const p = this.find(id);
-		if (!p?.path || typeof EventSource === 'undefined') return;
+		if (!p || !this.folderOf(id) || typeof EventSource === 'undefined') return;
 		const es = new EventSource(`/projects/${id}/watch`);
 		this.es = es;
 		es.onmessage = (ev) => {
@@ -450,6 +459,15 @@ export class Tracker {
 		p.summary = text;
 		void persist.update(pid, { description: text });
 	}
+	// Start / due, edited in place in the meta row. Clearing the input sends
+	// null so the column empties rather than storing an empty string.
+	setDate(pid: string, field: 'start' | 'due', value: string) {
+		const p = this.find(pid);
+		const next = value.trim();
+		if (!p || p[field] === next) return;
+		p[field] = next;
+		void persist.update(pid, { [field]: next || null });
+	}
 
 	// ---- umbrella linking (songs → album, sub-projects → rebuild, …) ---------
 	childrenOf(pid: string): Project[] {
@@ -457,7 +475,16 @@ export class Tracker {
 	}
 	linkParent(childId: string, parentId?: string) {
 		const c = this.find(childId);
-		if (!c || childId === parentId || c.parentId === parentId) return;
+		if (!c || c.parentId === parentId) return;
+		// Nesting is any depth, so a link can close a loop (A under B under A).
+		// Refuse rather than persist a chain that inheritance would have to
+		// walk forever.
+		if (parentId && wouldCycle(childId, parentId, this.projects)) {
+			toast.error('That would make a loop', {
+				description: `${this.find(parentId)?.name ?? 'That project'} already sits under ${c.name}.`
+			});
+			return;
+		}
 		c.parentId = parentId;
 		void persist.update(childId, { parent_id: parentId ? Number(parentId) : null });
 		const parent = parentId ? this.find(parentId) : undefined;

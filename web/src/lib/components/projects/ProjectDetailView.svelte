@@ -15,6 +15,13 @@
 		type Project
 	} from '$lib/projects/data';
 	import { kindInfo } from '$lib/projects/kinds';
+	import {
+		inheritedDue,
+		inheritedPath,
+		inheritedPeople,
+		inheritedStart,
+		wouldCycle
+	} from '$lib/projects/inherit';
 	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
 	import AudioFileRow from './AudioFileRow.svelte';
 	import FileRowActions from './FileRowActions.svelte';
@@ -40,9 +47,21 @@
 	const doneCount = $derived(p.tasks.filter((x) => x.done).length);
 	const children = $derived(t.childrenOf(p.id));
 	const parent = $derived(p.parentId ? t.find(p.parentId) : undefined);
+	// Anything that wouldn't close a loop and isn't already a child here.
+	// Nesting is any depth, so having a parent no longer disqualifies a project.
 	const linkable = $derived(
-		t.projects.filter((x) => x.id !== p.id && !x.parentId && x.id !== p.parentId)
+		t.projects.filter(
+			(x) => x.id !== p.id && x.parentId !== p.id && !wouldCycle(x.id, p.id, t.projects)
+		)
 	);
+	// Values that flow down the umbrella chain: a project shows its parent's
+	// where its own is empty (see $lib/projects/inherit).
+	const dueIn = $derived(inheritedDue(p, t.projects));
+	const startIn = $derived(inheritedStart(p, t.projects));
+	const credits = $derived(inheritedPeople(p, t.projects));
+	// The folder this project's files actually come from — the server resolves
+	// the same chain, so the card and the endpoints agree.
+	const folder = $derived(inheritedPath(p, t.projects));
 	const links = $derived(p.details?.links ?? []);
 
 	// Visual family: images/videos become a tile grid; everything else stays rows.
@@ -101,7 +120,7 @@
 	function onFilesDrop(e: DragEvent) {
 		e.preventDefault();
 		dragOver = false;
-		if (!p.path) {
+		if (!folder.value) {
 			t.openPicker(p.id);
 			return;
 		}
@@ -222,13 +241,58 @@
 			<span class="font-mono text-[10px] tracking-[0.1em] text-muted-foreground">HEALTH</span>
 			<span class="size-[7px] rounded-full" style="background:{h.color};"></span>{h.label}
 		</div>
+		<!-- Dates are edited in place like everything else on this page: the
+		     native picker sits behind the formatted value, so the row keeps its
+		     read-mode shape until you click it. -->
 		<div class="flex items-center gap-2 font-mono text-[11px] font-semibold text-foreground/70">
 			<span class="tracking-[0.1em] text-muted-foreground">DUE</span>
-			<span style="color:{du.color};">{p.due ? fmtISO(p.due) : '—'} · {du.label}</span>
+			<label class="relative cursor-pointer">
+				{#if p.due}
+					<span style="color:{du.color};">{fmtISO(p.due)} · {du.label}</span>
+				{:else if dueIn.from}
+					<!-- Inherited: dimmed, and named, so it's clear the date belongs to
+					     the parent and typing here would override it. -->
+					<span class="font-normal text-muted-foreground"
+						>{fmtISO(dueIn.value)} · from {dueIn.from.name}</span
+					>
+				{:else}
+					<span class="text-muted-foreground">set date</span>
+				{/if}
+				<input
+					type="date"
+					value={p.due?.slice(0, 10) ?? ''}
+					onchange={(e) => t.setDate(p.id, 'due', e.currentTarget.value)}
+					aria-label="Project due date"
+					title={dueIn.from && !p.due
+						? `Inherited from ${dueIn.from.name} — pick a date to override`
+						: 'Project due date'}
+					class="absolute inset-0 cursor-pointer opacity-0"
+				/>
+			</label>
 		</div>
 		<div class="flex items-center gap-2 font-mono text-[11px] font-semibold text-foreground/70">
 			<span class="tracking-[0.1em] text-muted-foreground">START</span>
-			<span>{p.start ? fmtISO(p.start) : '—'}</span>
+			<label class="relative cursor-pointer">
+				{#if p.start}
+					<span>{fmtISO(p.start)}</span>
+				{:else if startIn.from}
+					<span class="font-normal text-muted-foreground"
+						>{fmtISO(startIn.value)} · from {startIn.from.name}</span
+					>
+				{:else}
+					<span class="text-muted-foreground">set date</span>
+				{/if}
+				<input
+					type="date"
+					value={p.start?.slice(0, 10) ?? ''}
+					onchange={(e) => t.setDate(p.id, 'start', e.currentTarget.value)}
+					aria-label="Project start date"
+					title={startIn.from && !p.start
+						? `Inherited from ${startIn.from.name} — pick a date to override`
+						: 'Project start date'}
+					class="absolute inset-0 cursor-pointer opacity-0"
+				/>
+			</label>
 		</div>
 	</div>
 
@@ -525,11 +589,18 @@
 						class="w-[58px] flex-none font-mono text-[10px] leading-[1.4] tracking-[0.06em] text-muted-foreground"
 						>PATH</span
 					>
-					<span class="min-w-0 flex-1 break-all font-mono text-[12px] leading-[1.4] text-foreground/70"
-						>{p.path || '—'}</span
-					>
+					<span class="min-w-0 flex-1 break-all font-mono text-[12px] leading-[1.4] text-foreground/70">
+						{#if folder.from}
+							<!-- Resolved from an ancestor: show where it came from so the
+							     folder doesn't look like this project's own setting. -->
+							<span class="text-muted-foreground">{folder.value}</span>
+							<span class="block text-[10px] text-muted-foreground/70">from {folder.from.name}</span>
+						{:else}
+							{folder.value || '—'}
+						{/if}
+					</span>
 					<div class="flex flex-none gap-1 self-start">
-						{#if p.path}
+						{#if folder.value}
 							<button
 								onclick={() => t.openLocal(p.id)}
 								title="Open folder in file manager"
@@ -541,7 +612,7 @@
 							onclick={() => t.openPicker(p.id)}
 							title="Link this project to a folder"
 							class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
-							>{p.path ? 'CHANGE' : 'SET'}</button
+							>{p.path ? 'CHANGE' : folder.value ? 'OVERRIDE' : 'SET'}</button
 						>
 					</div>
 				</div>
@@ -854,8 +925,39 @@
 						>
 					</div>
 				{:else}
-					<div class="pt-1.5 text-[13px] text-muted-foreground">
-						No people yet — linked from the People database.
+					{#if !credits.length}
+						<div class="pt-1.5 text-[13px] text-muted-foreground">
+							No people yet — linked from the People database.
+						</div>
+					{/if}
+				{/each}
+
+				<!-- Credits from further up the chain: an album's engineer is on
+				     every song. Read-only here — they're edited where they're
+				     credited, so one change updates everything beneath it. -->
+				{#each credits.filter((c) => c.from) as c (c.from!.id + (c.person.personId ?? c.person.name))}
+					<div class="flex items-center gap-3 border-t py-2">
+						<span
+							class="grid size-7 flex-none place-items-center rounded-full bg-secondary/60 font-mono text-[10px] text-muted-foreground"
+							>{initials(c.person.name || '?')}</span
+						>
+						{#if c.person.personId}
+							<a
+								href="/people/{c.person.personId}"
+								class="min-w-0 flex-1 truncate text-[13.5px] text-muted-foreground hover:underline"
+								>{c.person.name}</a
+							>
+						{:else}
+							<span class="min-w-0 flex-1 truncate text-[13.5px] text-muted-foreground"
+								>{c.person.name}</span
+							>
+						{/if}
+						<span
+							class="flex-none font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground/70"
+							title={`Credited on ${c.from!.name}`}
+						>
+							{c.person.role || '—'} · {c.from!.name}
+						</span>
 					</div>
 				{/each}
 				<div class="mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
@@ -954,7 +1056,7 @@
 						</span>
 					{/if}
 					<span class="ml-auto flex gap-1">
-						{#if p.path}
+						{#if folder.value}
 							<button
 								onclick={() => fileInput?.click()}
 								disabled={t.uploading}
@@ -1021,7 +1123,7 @@
 				{:else}
 					{#if !gridFiles.length}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
-							{#if p.path}
+							{#if folder.value}
 								No files yet — drop them on this card, or use <span class="font-mono text-[11px]">+ ADD FILES</span>.
 							{:else}
 								<button

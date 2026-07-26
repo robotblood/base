@@ -160,6 +160,7 @@ export interface Project {
 	summary: string;
 	source?: string; // where the record came from (import source)
 	path?: string; // on-disk folder root — enables real file previews
+	rawPath?: string; // folder recorded by the importer, weaker than `path`
 	parentId?: string; // umbrella project (e.g. a song's album)
 	details?: ProjectDetails; // kind-specific extras
 	phases: Phase[];

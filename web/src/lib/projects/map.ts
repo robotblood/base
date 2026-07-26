@@ -77,6 +77,10 @@ export function mapProject(
 		summary: str(row.description),
 		source: str(row.source),
 		path: str(row.path),
+		// The importer's folder, kept separate from the first-class column so
+		// path inheritance can apply the same precedence the server does
+		// (own → imported → ancestor). See $lib/projects/inherit.
+		rawPath: str((row.raw as { path?: unknown } | undefined)?.path),
 		parentId: row.parent_id != null ? String(row.parent_id) : undefined,
 		details:
 			row.details && typeof row.details === 'object'
