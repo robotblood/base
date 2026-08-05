@@ -18,9 +18,10 @@ export interface KindInfo {
 	family: Family;
 	phases: string[]; // preset seeded at creation
 	ready: ReadyFlag[]; // per-song flags in the rundown/tracklist
-	rundownLabel: string; // tab name
+	rundownLabel: string | null; // tab name; null = kind has no rundown tab
 	umbrellaLabel: string; // children card name
 	childKind: string; // default kind for created children
+	subkinds: string[]; // emphasis options within the kind (projects.subkind)
 }
 
 const READY_LIVE: ReadyFlag[] = [
@@ -46,31 +47,55 @@ const K = (
 	family,
 	phases,
 	ready: family === 'music' ? READY_MUSIC : READY_LIVE,
-	rundownLabel: family === 'music' ? 'Tracklist' : 'Show Rundown',
+	// Only performance media carry a song list; a graphics or app project has
+	// nothing to rundown, so the tab stays hidden for every other family.
+	rundownLabel: family === 'music' ? 'Tracklist' : family === 'live' ? 'Show Rundown' : null,
 	umbrellaLabel: 'Sub-projects',
 	childKind: 'music',
+	subkinds: [],
 	...extra
 });
 
 export const KINDS: KindInfo[] = [
-	K('graphics', 'Graphics', 'visual', ['Brief', 'Concepts', 'Revisions', 'Final']),
-	K('motion graphics', 'Motion Graphics', 'visual', ['Brief', 'Style frames', 'Animate', 'Polish', 'Deliver']),
-	K('3d', '3D', 'visual', ['Reference', 'Model', 'Texture', 'Light', 'Render']),
-	K('print', 'Print', 'visual', ['Design', 'Proof', 'Print', 'Delivered']),
-	K('video', 'Video', 'visual', ['Script', 'Board', 'Shoot', 'Edit', 'Color', 'Deliver']),
-	K('music', 'Music', 'music', ['Writing', 'Demo', 'Tracking', 'Mix', 'Master']),
-	K('album', 'Music Album', 'music', ['Writing', 'Tracking', 'Mix', 'Master', 'Release'], {
-		umbrellaLabel: 'Tracks'
+	K('graphics', 'Graphics', 'visual', ['Brief', 'Concepts', 'Revisions', 'Final'], {
+		subkinds: ['Logo', 'Thumbnail', 'Vector', 'Photo']
 	}),
-	K('app dev', 'App Development', 'software', ['Scope', 'Design', 'Build', 'Test', 'Ship']),
-	K('ui/ux', 'UI/UX', 'software', ['Research', 'Wireframe', 'Design', 'Handoff']),
-	K('tech audit', 'Tech Stack Audit', 'software', ['Inventory', 'Assess', 'Findings', 'Plan']),
-	K('rebuild', 'Rebuild', 'software', ['Audit', 'Plan', 'Build', 'Migrate', 'Verify'], {
-		umbrellaLabel: 'Workstreams'
+	K('motion graphics', 'Motion Graphics', 'visual', ['Brief', 'Style frames', 'Animate', 'Polish', 'Deliver'], {
+		subkinds: ['Stinger', 'Open', 'Lower 3rds', 'Credits', 'Logo Animation']
+	}),
+	K('3d', '3D', 'visual', ['Reference', 'Model', 'Texture', 'Light', 'Render'], {
+		subkinds: ['Model', 'Scene', 'Render']
+	}),
+	K('print', 'Print', 'visual', ['Design', 'Proof', 'Print', 'Delivered'], {
+		subkinds: ['Poster', 'Card', 'Packaging']
+	}),
+	K('video', 'Video', 'visual', ['Script', 'Board', 'Shoot', 'Edit', 'Color', 'Deliver'], {
+		subkinds: ['Short', 'Music Video', 'Edit', 'Podcast']
+	}),
+	K('music', 'Music', 'music', ['Writing', 'Demo', 'Tracking', 'Mix', 'Master'], {
+		subkinds: ['Demo', 'Single', 'Score']
+	}),
+	K('album', 'Music Album', 'music', ['Writing', 'Tracking', 'Mix', 'Master', 'Release'], {
+		umbrellaLabel: 'Tracks',
+		subkinds: ['LP', 'EP', 'Mixtape']
+	}),
+	K('app dev', 'App Development', 'software', ['Scope', 'Design', 'Build', 'Test', 'Ship'], {
+		// Rebuild and Tech Audit were kinds of their own; the taxonomy folds
+		// them in here as emphases (design pass, note 568).
+		subkinds: ['Web App', 'Site', 'Tool', 'Rebuild', 'Tech Audit']
+	}),
+	K('ui/ux', 'UI/UX', 'software', ['Research', 'Wireframe', 'Design', 'Handoff'], {
+		subkinds: ['Wireframe', 'Design System', 'Audit']
+	}),
+	// Not a media project — a countable table. Stock rows live in the Merch
+	// module (linked by merch.project_id); the project is the tour-facing view.
+	K('inventory', 'Inventory', 'default', ['Source', 'Stock', 'Sell'], {
+		subkinds: ['Merch', 'Gear', 'Supplies']
 	}),
 	K('live show', 'Live Show', 'live', ['Pre-pro', 'Rehearsal', 'Show', 'Wrap'], {
 		umbrellaLabel: 'Segments',
-		childKind: 'video'
+		childKind: 'video',
+		subkinds: ['Tour', 'One-off', 'Stream']
 	})
 ];
 
@@ -82,7 +107,9 @@ const ALIASES: Record<string, string> = {
 	film: 'video',
 	software: 'app dev',
 	website: 'app dev',
-	audit: 'tech audit',
+	audit: 'app dev',
+	'tech audit': 'app dev',
+	rebuild: 'app dev',
 	'live-show': 'live show',
 	show: 'live show'
 };

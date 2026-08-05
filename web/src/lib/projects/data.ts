@@ -95,11 +95,28 @@ export interface ProjFile {
 	meta: string;
 	rel?: string; // path relative to the project folder (real, on-disk files)
 	kind?: string; // image | video | audio | other (from the files endpoint)
+	mtime?: number; // unix ms — lets the hero pick the newest file
 }
+// A file's place in the project's lifecycle. Archived files leave the cards
+// (and the hero) but stay one toggle away — status, not deletion.
+export type FileStatus = 'draft' | 'final' | 'archived';
 export interface Linked {
 	type: string;
 	title: string;
 	status: string;
+}
+// A Merch module row linked to this project (inventory kind). The Merch
+// record stays the source of truth; the project is the tour-facing view.
+export interface MerchRow {
+	id: string;
+	name: string;
+	category: string;
+	sku: string;
+	price?: number;
+	cost?: number;
+	stock: number;
+	lowAt?: number; // merch.low_stock_at
+	url?: string;
 }
 export interface PersonRef {
 	personId?: string; // People database record; name mirrors it when linked
@@ -152,6 +169,7 @@ export interface Project {
 	id: string;
 	name: string;
 	kind: string;
+	subkind?: string; // emphasis within the kind (logo | stinger | tour | …)
 	year: string;
 	status: string;
 	health: Health;
@@ -168,6 +186,7 @@ export interface Project {
 	milestones: Milestone[];
 	notes: ProjNote[];
 	events: ProjEvent[];
+	merch: MerchRow[];
 	files: ProjFile[];
 	linked: Linked[];
 	people: PersonRef[];
@@ -194,6 +213,8 @@ export interface ProjectDetails {
 	links?: { label: string; url: string }[];
 	print?: PrintSpecs;
 	deliverables?: Deliverable[];
+	cover?: string; // pinned hero file (rel path); unset = newest file wins
+	fileStatus?: Record<string, FileStatus>; // keyed by file rel path
 }
 
 export interface Stage {

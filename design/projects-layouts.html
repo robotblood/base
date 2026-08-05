@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>base — Projects Design Pass</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --card: #fdfbf7;
+    --border: #e3ddd0;
+    --fg: #23211c;
+    --muted: #8a8474;
+    --amber: #d9a514;
+    --blue: #3a6ea5;
+    --gold: #c68a1a;
+    --green: #2f7d5b;
+    --red: #b5473c;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.55 -apple-system, "Public Sans", "Inter", system-ui, sans-serif;
+    padding: 40px 20px 90px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  .k { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -.01em; margin: 6px 0 8px; }
+  h2 { font-size: 19px; font-weight: 800; margin: 54px 0 6px; }
+  h2 .num { color: var(--amber); font-family: var(--mono); font-size: 13px; margin-right: 8px; }
+  .lede { color: #55503f; max-width: 72ch; margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+
+  /* ---- taxonomy ---- */
+  .tax { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 14px; }
+  .tax .cat { padding: 12px 14px; }
+  .tax .cat b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .tax .cat .cnt { float: right; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .tax .sub { font-size: 12px; color: #6a6455; line-height: 1.7; }
+  .tax .new { font-family: var(--mono); font-size: 9px; color: var(--green); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 5px; vertical-align: 1px; }
+  .maptable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+  .maptable th { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .maptable td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .maptable tr:last-child td { border-bottom: 0; }
+  .maptable .q { color: var(--red); font-weight: 600; }
+
+  /* ---- shared spine ---- */
+  .spine { padding: 18px 20px 16px; margin-top: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 20px; padding: 4px 11px; font-size: 11.5px; font-weight: 600; color: #6a6455; background: var(--card); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .pill.on { color: #fff; border-color: transparent; }
+  .meta { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  /* ---- mock frames ---- */
+  .mock { margin-top: 16px; overflow: hidden; }
+  .mock .bar { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--card) 60%, var(--bg)); }
+  .mock .bar b { font-size: 13px; }
+  .mock .body { padding: 16px; }
+  .mtitle { font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+  .grid { display: grid; gap: 10px; }
+  .zone { border: 1px dashed #cfc7b4; border-radius: 10px; padding: 10px 12px; background: rgba(255,255,255,.45); min-height: 44px; }
+  .zone .k { display: block; margin-bottom: 4px; }
+  .hero { border-style: solid; background: var(--card); }
+  .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+  .thumb { aspect-ratio: 4/3; border-radius: 7px; background: linear-gradient(135deg, #e8e2d2, #d5cdb8); position: relative; }
+  .thumb.big { grid-column: span 2; grid-row: span 2; aspect-ratio: auto; background: linear-gradient(135deg, #dcd2ee, #b9c8e0); }
+  .thumb.v::after { content: "▶"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 18px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  .player { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font-size: 12px; }
+  .player .btn { width: 26px; height: 26px; border-radius: 50%; background: var(--fg); color: var(--bg); display: grid; place-items: center; font-size: 10px; flex: none; }
+  .player .track { flex: 1; height: 4px; border-radius: 2px; background: var(--border); position: relative; }
+  .player .track i { position: absolute; inset: 0 65% 0 0; background: var(--gold); border-radius: 2px; }
+  .rowline { display: flex; gap: 10px; align-items: center; padding: 5px 2px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+  .rowline:last-child { border-bottom: 0; }
+  .rowline .n { font-family: var(--mono); font-size: 10.5px; color: var(--muted); width: 18px; }
+  .flag { font-family: var(--mono); font-size: 9px; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; color: #fff; }
+  .note { font-size: 12px; color: #6a6455; margin-top: 10px; max-width: 72ch; }
+  .note b { color: var(--fg); }
+  .why { border-left: 3px solid var(--amber); padding: 2px 0 2px 12px; margin-top: 14px; font-size: 12.5px; color: #55503f; max-width: 78ch; }
+  .qlist li { margin: 6px 0; }
+  code { font-family: var(--mono); font-size: 11.5px; background: #eee8da; border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="k">base · design pass · 2026-08-03 · from note 568</span>
+  <h1>Project pages that lead with the medium</h1>
+  <p class="lede">One spine, five bodies. Every project keeps the same header — title, status
+  pipeline, phases, progress — so the system reads as one thing. Below the spine, the layout
+  belongs to the medium: a graphic <em>is</em> its image, an album <em>is</em> its tracklist,
+  a tour <em>is</em> its dates. Scope: all 81 live projects.</p>
+
+  <!-- ══════════════ 1 · TAXONOMY ══════════════ -->
+  <h2><span class="num">01</span>Categories &amp; subcategories</h2>
+  <p class="lede">Your 11 categories, wired as <code>kind</code> + a new <code>subkind</code> field.
+  Subcategory changes emphasis, not layout — a Logo and a Thumbnail share the Graphics page.</p>
+
+  <div class="tax">
+    <div class="card cat"><b>Graphics <span class="cnt">~32</span></b><span class="sub">Logo · Thumbnail · Vector · Photo</span></div>
+    <div class="card cat"><b>Motion Graphics <span class="cnt">—</span></b><span class="sub">Stinger · Open · Lower 3rds · Credits · Logo Anim.</span></div>
+    <div class="card cat"><b>3D <span class="cnt">4</span></b><span class="sub">Model · Scene · Render</span></div>
+    <div class="card cat"><b>Print <span class="cnt">—</span></b><span class="sub">Poster · Card · Packaging</span></div>
+    <div class="card cat"><b>Video <span class="cnt">23</span></b><span class="sub">Short · Music Video · Edit</span></div>
+    <div class="card cat"><b>Music Track <span class="cnt">3</span></b><span class="sub">Demo · Single · Score</span></div>
+    <div class="card cat"><b>Music Album <span class="cnt">—</span></b><span class="sub">LP · EP · Mixtape</span></div>
+    <div class="card cat"><b>App Development <span class="cnt">3</span></b><span class="sub">Web App · Site · Tool</span></div>
+    <div class="card cat"><b>UI/UX <span class="cnt">—</span></b><span class="sub">Wireframe · Design System · Audit</span></div>
+    <div class="card cat"><b>Inventory <span class="new">NEW KIND</span><span class="cnt">—</span></b><span class="sub">Merch · Gear · Supplies</span></div>
+    <div class="card cat"><b>Live Show <span class="cnt">1</span></b><span class="sub">Tour · One-off · Stream</span></div>
+  </div>
+
+  <table class="maptable card" style="border-radius:12px; overflow:hidden;">
+    <tr><th>today's kind</th><th>rows</th><th>becomes</th></tr>
+    <tr><td><code>design</code></td><td>18</td><td>Graphics (subkind per project — most look like Vector/Logo)</td></tr>
+    <tr><td><code>photo</code></td><td>6</td><td>Graphics / Photo</td></tr>
+    <tr><td><code>mixed</code></td><td>11</td><td class="q">needs a 10-minute triage — zips &amp; grab-bags; sort or archive</td></tr>
+    <tr><td><code>project</code></td><td>4</td><td class="q">not media at all (Diet, Continuing Ed) — “General” kind, or move to Todos?</td></tr>
+    <tr><td><code>music</code></td><td>3</td><td>Music Track (Album stays for multi-track umbrellas)</td></tr>
+    <tr><td><code>tech audit</code> / <code>rebuild</code></td><td>1</td><td>fold into App Development as subkinds</td></tr>
+  </table>
+
+  <!-- ══════════════ 2 · SHARED SPINE ══════════════ -->
+  <h2><span class="num">02</span>The shared spine</h2>
+  <p class="lede">Identical on every project, top of every page. This is what makes eleven kinds feel like one system.</p>
+
+  <div class="card spine">
+    <span class="k">Kind · 2026 · Graphics / Logo</span>
+    <div class="mtitle" style="margin:2px 0 10px;">Project Name</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px;" class="meta">
+      <span>PROGRESS ▓▓▓░░░░ 40%</span><span>HEALTH ● On track</span><span>DUE Aug 15</span><span>START Jul 21</span>
+    </div>
+    <div style="display:flex; gap:7px; flex-wrap:wrap;">
+      <span class="pill"><span class="dot" style="background:#8a8474"></span>Not Started</span>
+      <span class="pill on" style="background:var(--blue)"><span class="dot" style="background:#fff"></span>In Progress</span>
+      <span class="pill"><span class="dot" style="background:var(--gold)"></span>Needs Attention</span>
+      <span class="pill"><span class="dot" style="background:var(--green)"></span>Complete</span>
+    </div>
+  </div>
+
+  <!-- ══════════════ 3 · VISUAL ══════════════ -->
+  <h2><span class="num">03</span>Visual — Graphics · Motion · 3D · Print · Video</h2>
+  <p class="lede">The work is an image, so the image is the page. Hero preview first, everything
+  administrative in a narrow right rail. No more hunting for what the project looks like.</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Autumn Website</b><span class="meta">GRAPHICS / THUMBNAIL · real project</span></div>
+    <div class="body grid" style="grid-template-columns: 1fr 280px;">
+      <div style="display:grid; gap:10px;">
+        <div class="zone hero">
+          <span class="k">Hero preview — latest file, click to open</span>
+          <div class="thumbs">
+            <div class="thumb big"></div>
+            <div class="thumb"></div><div class="thumb"></div>
+            <div class="thumb"></div><div class="thumb"></div>
+          </div>
+        </div>
+        <div class="zone"><span class="k">Versions / files — newest first, drag to upload</span></div>
+        <div class="zone"><span class="k">Notes (inline doc)</span></div>
+      </div>
+      <div style="display:grid; gap:10px; align-content:start;">
+        <div class="zone"><span class="k">Details — path · links · summary</span></div>
+        <div class="zone"><span class="k">Phases — Brief → Concepts → Revisions → Final</span></div>
+        <div class="zone"><span class="k">Tasks &amp; up next</span></div>
+        <div class="zone"><span class="k">People</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note"><b>Per-subkind emphasis:</b> Video's hero is a player (▶ on the newest cut, older cuts
+  as a version list). Motion adds a stinger/loop preview. Print's rail gains a <b>spec card</b>
+  (dimensions · bleed · stock). 3D's hero is the newest render, files rail keeps .blend rows.</p>
+
+  <!-- ══════════════ 4 · MUSIC ══════════════ -->
+  <h2><span class="num">04</span>Music — Track &amp; Album</h2>
+  <p class="lede">A track leads with its player and mix state. An album is its tracklist —
+  the umbrella page where every row is a child track with ready-flags.</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Park States</b><span class="meta">MUSIC ALBUM · real project</span></div>
+    <div class="body grid" style="grid-template-columns: 1fr 280px;">
+      <div style="display:grid; gap:10px;">
+        <div class="zone hero">
+          <span class="k">Tracklist — the page IS the record</span>
+          <div class="player" style="margin-bottom:8px;"><span class="btn">▶</span><span>Fun With Owen — rough mix 3</span><span class="track"><i></i></span><span class="meta">2:41</span></div>
+          <div class="rowline"><span class="n">01</span><span style="flex:1">Fun With Owen</span><span class="flag" style="background:var(--blue)">Tracked</span><span class="flag" style="background:var(--gold)">Mixed</span></div>
+          <div class="rowline"><span class="n">02</span><span style="flex:1">Park States</span><span class="flag" style="background:var(--blue)">Tracked</span></div>
+          <div class="rowline"><span class="n">03</span><span style="flex:1">(new track)</span><span class="meta">+ add</span></div>
+        </div>
+        <div class="zone"><span class="k">Notes / lyrics doc</span></div>
+      </div>
+      <div style="display:grid; gap:10px; align-content:start;">
+        <div class="zone hero" style="aspect-ratio:1; display:grid; place-items:center; background:linear-gradient(135deg,#e0d6c2,#cbbfa4);"><span class="k">Artwork</span></div>
+        <div class="zone"><span class="k">Phases — Writing → Tracking → Mix → Master → Release</span></div>
+        <div class="zone"><span class="k">Details · files · people</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 5 · SOFTWARE ══════════════ -->
+  <h2><span class="num">05</span>Software — App Dev · UI/UX</h2>
+  <p class="lede">No single artifact to preview — the page leads with <b>where it lives</b>
+  (links), <b>where it is</b> (phases), and <b>what's next</b> (tasks). Screens come second.</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Integrity Mindset Group</b><span class="meta">APP DEV / SITE · real project</span></div>
+    <div class="body grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="zone hero"><span class="k">Launchpad — live site · repo · staging · brief (big link buttons)</span></div>
+      <div class="zone hero"><span class="k">Now — current phase + next 3 due tasks, one glance</span></div>
+      <div class="zone" style="grid-column:1/-1;"><span class="k">Screens — page/screen thumbnails (wireframe → design → built)</span></div>
+      <div class="zone"><span class="k">Tasks &amp; milestones</span></div>
+      <div class="zone"><span class="k">Notes · details · people</span></div>
+    </div>
+  </div>
+  <p class="note"><b>This fixes the "boxes all over" page:</b> today Integrity Mindset shows the
+  same card pile as everything else. Here the top row answers the two questions you actually
+  have — <em>where is it, what's next</em> — and everything else is one row down.</p>
+
+  <!-- ══════════════ 6 · LIVE ══════════════ -->
+  <h2><span class="num">06</span>Live Show</h2>
+  <p class="lede">A tour is its dates. The run comes first with advance state per show; the
+  rundown stays its own tab (and now only exists here and on music).</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Robotblood — Fall Tour</b><span class="meta">LIVE SHOW / TOUR · real project</span></div>
+    <div class="body grid" style="grid-template-columns: 1fr 280px;">
+      <div style="display:grid; gap:10px;">
+        <div class="zone hero">
+          <span class="k">The run — date · city · advance state</span>
+          <div class="rowline"><span class="n meta">SEP 12</span><span style="flex:1">Sioux Falls — Total Drag</span><span class="flag" style="background:var(--green)">Advanced</span></div>
+          <div class="rowline"><span class="n meta">SEP 13</span><span style="flex:1">Minneapolis — 7th St Entry</span><span class="flag" style="background:var(--gold)">Pending</span></div>
+          <div class="rowline"><span class="n meta">SEP 14</span><span style="flex:1">Madison — (hold)</span><span class="flag" style="background:#8a8474">Hold</span></div>
+        </div>
+        <div class="zone"><span class="k">Money — merch counts + settlement roll-up per show</span></div>
+      </div>
+      <div style="display:grid; gap:10px; align-content:start;">
+        <div class="zone"><span class="k">Rundown tab ↗ (Show Rundown lives here)</span></div>
+        <div class="zone"><span class="k">Segments (child projects)</span></div>
+        <div class="zone"><span class="k">People · files · notes</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 7 · INVENTORY ══════════════ -->
+  <h2><span class="num">07</span>Inventory <span class="new" style="font-size:10px; vertical-align:4px;">NEW</span></h2>
+  <p class="lede">Not a media project — a countable table. Leads with stock levels and low-stock
+  signal. Question for you below on how this relates to the Merch module.</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Tour Merch 2026</b><span class="meta">INVENTORY / MERCH · example</span></div>
+    <div class="body grid" style="grid-template-columns: 1fr 280px;">
+      <div class="zone hero">
+        <span class="k">Stock table — item · on hand · low-at · unit cost/price</span>
+        <div class="rowline"><span style="flex:1">Owl Tee (M)</span><span class="meta">14 on hand</span><span class="flag" style="background:var(--green)">OK</span></div>
+        <div class="rowline"><span style="flex:1">Owl Tee (L)</span><span class="meta">3 on hand</span><span class="flag" style="background:var(--red)">LOW</span></div>
+        <div class="rowline"><span style="flex:1">Tour Poster</span><span class="meta">61 on hand</span><span class="flag" style="background:var(--green)">OK</span></div>
+      </div>
+      <div style="display:grid; gap:10px; align-content:start;">
+        <div class="zone"><span class="k">Value roll-up — cost · retail · margin</span></div>
+        <div class="zone"><span class="k">Movements — sold at show / restocked</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 8 · OVERVIEW ══════════════ -->
+  <h2><span class="num">08</span>Overview relayout (your sketch, drawn)</h2>
+  <p class="lede">Buttons stay on top. Main focus top-left; notes get the top-right third.
+  This is the dashboard change from the same note, queued after this pass.</p>
+
+  <div class="card mock">
+    <div class="bar"><b>Overview</b><span class="meta">localhost:3000</span></div>
+    <div class="body grid" style="grid-template-columns: 2fr 1fr;">
+      <div class="zone" style="grid-column:1/-1; min-height:34px;"><span class="k">Quick actions — weekly note · new project · quick capture</span></div>
+      <div class="zone hero" style="min-height:120px;"><span class="k">Main focus — top projects (next phase) + tasks due this week</span></div>
+      <div class="zone hero" style="min-height:120px;"><span class="k">Notes — recent + pinned, top right, 1/3 width</span></div>
+      <div class="zone"><span class="k">In flight — dated threads, tour runs</span></div>
+      <div class="zone"><span class="k">Loose ends</span></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ 9 · QUESTIONS ══════════════ -->
+  <h2><span class="num">09</span>Your calls before I build</h2>
+  <div class="card" style="padding:16px 20px;">
+    <ul class="qlist" style="padding-left:18px;">
+      <li><b>Inventory:</b> new project kind that <em>links</em> to the existing Merch module rows, or fold Merch into it? (I'd link — Merch already has the full stack.)</li>
+      <li><b>The 11 <code>mixed</code> and 4 <code>project</code> rows:</b> want a triage list to sort them into real kinds, or archive the zips wholesale?</li>
+      <li><b>Subcategory:</b> OK as a single <code>subkind</code> select per project (options depend on kind)? Editable from the detail header.</li>
+      <li><b>Hero behavior:</b> newest file auto-promotes to hero, with a "pin this as cover" override — right?</li>
+    </ul>
+  </div>
+
+  <p class="why">Build order once you sign off: <b>1)</b> <code>subkind</code> field + kind
+  migration (with your triage answers) · <b>2)</b> hero region + right rail in
+  ProjectDetailView per family · <b>3)</b> per-subkind emphasis (player heroes, spec card) ·
+  <b>4)</b> Overview relayout. The spine and all existing cards survive — this reorders and
+  promotes, it doesn't rebuild data.</p>
+
+</div>
+</body>
+</html>

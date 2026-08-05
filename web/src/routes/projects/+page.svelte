@@ -18,7 +18,7 @@
 	// The tracker intentionally captures the initial load and owns all state
 	// from there (mutations are optimistic; the page is never re-loaded).
 	// svelte-ignore state_referenced_locally
-	const t = new Tracker(data.projects, { directory: data.directory });
+	const t = new Tracker(data.projects, { directory: data.directory, merchPool: data.merchPool });
 	const current = $derived(t.current);
 	onDestroy(() => t.stopWatch());
 

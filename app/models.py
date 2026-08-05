@@ -29,6 +29,13 @@ class Base(SQLModel):
     raw: dict = Field(default_factory=dict, sa_type=JSONB)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+    # When the row was really made, as opposed to when base first saw it.
+    # Null means the export recorded nothing — Notion only writes a creation
+    # time for databases that declared it as a property, and page-tree imports
+    # carry none at all. Kept separate from created_at precisely so "unknown"
+    # stays expressible: a null sorts last, where a fallback timestamp would
+    # claim the row is the newest thing in the system.
+    source_created_at: Optional[datetime] = Field(default=None, index=True)
 
 
 class Todo(Base, table=True):
@@ -139,6 +146,9 @@ class Project(Base, table=True):
     # (phases, milestones, …) are JSONB: they're only ever read/written whole
     # with their project, so they don't earn their own tables.
     kind: Optional[str] = Field(default=None, index=True)  # video | live show | music | ...
+    # Emphasis within a kind (logo | stinger | tour | ...). Changes what the
+    # detail page promotes, never which layout family renders it.
+    subkind: Optional[str] = None
     year: Optional[str] = None
     health: Optional[str] = None  # on-track | at-risk | blocked
     start: Optional[date] = None
@@ -155,6 +165,49 @@ class Project(Base, table=True):
     activity: list = Field(default_factory=list, sa_type=JSONB)  # [{date, text}]
     rundown: Optional[dict] = Field(default=None, sa_type=JSONB)  # {sections: [...]}
     details: dict = Field(default_factory=dict, sa_type=JSONB)  # kind-specific: links, specs, ...
+
+
+class Revision(SQLModel, table=True):
+    """A checkpoint of one record, taken just before an update overwrites it.
+
+    Insurance against the editor's autosave (or a fat-fingered edit) silently
+    destroying a body: at most one checkpoint per record per interval (see
+    app/revisions.py), pruned to the newest handful. Deliberately not Base —
+    a snapshot needs none of the tags/raw/source apparatus.
+    """
+
+    __tablename__ = "revisions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    module: str = Field(index=True)  # endpoint name ("notes") or custom key ("documents")
+    record_id: int = Field(index=True)
+    snapshot: dict = Field(default_factory=dict, sa_type=JSONB)
+    saved_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class CustomTable(Base, table=True):
+    """A user-defined table: schema lives here, rows in CustomRow.
+
+    Field definitions are a JSONB list of the web app's FieldSpec shape
+    ({name, label, type, options?, ref?, required?, rich?}) — they're always
+    read and written whole with their table, so they don't earn a table of
+    their own. The web synthesizes a ModuleConfig from this at load time and
+    reuses every existing view (see web/src/lib/modules.ts).
+    """
+
+    __tablename__ = "custom_tables"
+    name: str = Field(index=True)  # display label, e.g. "Documents"
+    key: str = Field(index=True)  # url slug + endpoint segment, e.g. "documents"
+    fields: list = Field(default_factory=list, sa_type=JSONB)
+
+
+class CustomRow(Base, table=True):
+    """One record in a custom table. Field values live in `data` (JSONB);
+    the title is denormalized for search and default ordering."""
+
+    __tablename__ = "custom_rows"
+    table_id: int = Field(index=True)
+    title: str = Field(default="", index=True)
+    data: dict = Field(default_factory=dict, sa_type=JSONB)
 
 
 class JobApplication(Base, table=True):

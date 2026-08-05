@@ -1,7 +1,7 @@
 // Server-only helpers for previewing a record's on-disk files.
 // The folder root is resolved from the stored record (by id) and cached; every
 // requested file path is validated to stay inside that root (no traversal).
-import { readdirSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { resolve, sep, extname } from 'node:path';
 import { getModule } from '$lib/modules';
 import { api } from '$lib/server/api';
@@ -121,6 +121,7 @@ export interface MediaItem {
 	kind: Kind;
 	seq?: boolean; // a collapsed render/animation sequence
 	count?: number; // number of frames in the sequence
+	mtime?: number; // unix ms — the hero preview promotes the newest file
 }
 
 // Render/animation frame formats — runs of these get collapsed to one tile.
@@ -186,5 +187,15 @@ export function listMedia(root: string, cap = 120): { items: MediaItem[]; capped
 	}
 
 	out.sort((a, b) => a.rel.localeCompare(b.rel, undefined, { numeric: true }));
-	return { items: out.slice(0, cap), capped: out.length > cap };
+	const items = out.slice(0, cap);
+	// The walk skips per-file stat on purpose (it can touch 20k entries); the
+	// capped list is at most `cap` files, so stating just those stays cheap.
+	for (const it of items) {
+		try {
+			it.mtime = Math.round(statSync(resolve(root, it.rel)).mtimeMs);
+		} catch {
+			/* vanished mid-walk — leave undefined */
+		}
+	}
+	return { items, capped: out.length > cap };
 }

@@ -1,6 +1,14 @@
 // Shapes FastAPI rows into the tracker's Project/Task types. Pure and
 // framework-free, shared by the server load and client-side create flow.
-import { STAGES, type Health, type Project, type Rundown, type ShowDoc, type Task } from './data';
+import {
+	STAGES,
+	type Health,
+	type MerchRow,
+	type Project,
+	type Rundown,
+	type ShowDoc,
+	type Task
+} from './data';
 
 export type Row = Record<string, unknown>;
 
@@ -57,11 +65,28 @@ export function toProjEvent(ev: Row) {
 	};
 }
 
+const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+
+export function toMerch(m: Row): MerchRow {
+	return {
+		id: String(m.id),
+		name: str(m.name),
+		category: str(m.category),
+		sku: str(m.sku),
+		price: num(m.price),
+		cost: num(m.cost),
+		stock: num(m.stock) ?? 0,
+		lowAt: num(m.low_stock_at),
+		url: str(m.url) || undefined
+	};
+}
+
 export function mapProject(
 	row: Row,
 	todos: Row[] = [],
 	notes: Row[] = [],
-	events: Row[] = []
+	events: Row[] = [],
+	merch: Row[] = []
 ): Project {
 	const id = String(row.id);
 	const health = str(row.health);
@@ -69,6 +94,7 @@ export function mapProject(
 		id,
 		name: str(row.name),
 		kind: str(row.kind) || 'project',
+		subkind: str(row.subkind) || undefined,
 		year: str(row.year),
 		status: toStageKey(row.status),
 		health: (health === 'at-risk' || health === 'blocked' ? health : 'on-track') as Health,
@@ -97,6 +123,7 @@ export function mapProject(
 			.filter((e) => String(e.project_id) === id)
 			.map(toProjEvent)
 			.sort((a, b) => (a.when < b.when ? -1 : 1)),
+		merch: merch.filter((m) => String(m.project_id) === id).map(toMerch),
 		files: [],
 		linked: arr(row.linked),
 		people: arr(row.people),

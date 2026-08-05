@@ -154,6 +154,16 @@
 		{ label: 'On-accent on accent', fg: palette.onAccent, bg: palette.accent }
 	]);
 
+	// Interface-mock helpers: heading style N steps up the scale, body style,
+	// and the live radius — called from the template so they track the tokens.
+	const hSize = (step: number) => t.baseSize * Math.pow(t.scaleRatio, step);
+	const headStyle = (step: number) =>
+		`font-family:${fontStack(t.headingFont)};font-size:${hSize(step)}px;font-weight:${t.headingWeight};line-height:${t.headingLineHeight}`;
+	const bodyStyle = $derived(
+		`font-family:${fontStack(t.bodyFont)};font-size:${t.baseSize}px;font-weight:${t.bodyWeight};line-height:${t.bodyLineHeight}`
+	);
+	const r = $derived(`border-radius:${config.shape.radius}px`);
+
 	const card = 'rounded-[12px] border bg-card';
 	const sectionHead =
 		'mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground';
@@ -382,6 +392,103 @@
 			title="Design system"
 			subtitle={`${status} · every element below is rendered from these tokens`}
 		/>
+
+		<!-- The interface itself, modelled — not a list of specimens. Everything
+		     in the mock uses the app's own semantic classes plus the live
+		     typography tokens, so it moves with every control on the left. -->
+		<section class="mb-8">
+			<div class={sectionHead}>The interface — a live model, not a specimen list</div>
+			<div class="overflow-hidden border bg-background" style={r}>
+				<div class="grid sm:grid-cols-[170px_1fr]">
+					<!-- mini sidebar -->
+					<div class="hidden border-r bg-sidebar/40 px-3 py-4 sm:block">
+						<div class="mb-4 flex items-center gap-2">
+							<span
+								class="grid size-6 place-items-center bg-primary font-mono text-[10px] font-bold text-primary-foreground"
+								style={r}>b</span
+							>
+							<span class="text-[12px] font-bold" style={`font-family:${fontStack(t.headingFont)}`}>base</span>
+						</div>
+						{#each [['PROJ', 'Projects', '81'], ['NOTE', 'Notes', '462'], ['DOCU', 'Documents', '0']] as [code, name, n] (code)}
+							<div class="flex items-center gap-2 px-1.5 py-[5px]">
+								<span class="w-8 font-mono text-[8px] text-muted-foreground">{code}</span>
+								<span class="flex-1 text-[12px]" style={`font-family:${fontStack(t.bodyFont)}`}>{name}</span>
+								<span class="font-mono text-[10px] text-muted-foreground">{n}</span>
+							</div>
+						{/each}
+					</div>
+					<!-- mini page -->
+					<div class="min-w-0 px-6 py-5">
+						<div class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+							Graphics · In Progress
+						</div>
+						<div class="mb-3 mt-1 truncate" style={headStyle(3)}>Autumn Website</div>
+						<div class="mb-4 flex flex-wrap gap-2">
+							<button class="cursor-pointer bg-primary px-3.5 py-1.5 text-[12px] font-semibold text-primary-foreground" style={r}>Open folder</button>
+							<button class="cursor-pointer border bg-card px-3.5 py-1.5 text-[12px] font-semibold text-foreground/80" style={r}>Add files</button>
+							<span class="inline-flex items-center gap-1.5 self-center border px-2.5 py-1 text-[11px] font-medium text-foreground/70" style={`${r};border-radius:20px`}>
+								<span class="size-[6px] rounded-full" style={`background:${config.color.semantic.info}`}></span>In Progress
+							</span>
+						</div>
+						<div class="grid gap-3 lg:grid-cols-[1.5fr_1fr]">
+							<!-- example card: graphic, H2, H3, text, table -->
+							<div class="overflow-hidden border bg-card" style={r}>
+								<div
+									class="h-24"
+									style={`background:linear-gradient(120deg, color-mix(in srgb, ${palette.accent} 55%, ${palette.surface}), color-mix(in srgb, ${palette.accent} 18%, ${palette.surface}))`}
+								></div>
+								<div class="px-5 py-4">
+									<div style={headStyle(2)}>The hero card</div>
+									<div class="mb-1 mt-2 font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground" style={`font-size:${Math.max(10, hSize(0) * 0.72)}px`}>
+										H3 · Section label
+									</div>
+									<p class="text-foreground/85" style={bodyStyle}>
+										Body text carries the interface. The graphic above tints from your accent;
+										every surface, rule and radius here follows the tokens.
+									</p>
+									<div class="mt-3 border-t">
+										{#each [['Owl Tee (M)', '14 on hand', 'success', 'OK'], ['Tour Poster', '3 on hand', 'danger', 'LOW']] as [name, meta, sem, flag] (name)}
+											<div class="flex items-center gap-3 border-b py-2 last:border-b-0">
+												<span class="flex-1 truncate text-[13px]" style={`font-family:${fontStack(t.bodyFont)}`}>{name}</span>
+												<span class="font-mono text-[11px] text-muted-foreground">{meta}</span>
+												<span
+													class="px-1.5 py-[2px] font-mono text-[9px] font-semibold uppercase"
+													style={`border-radius:${Math.min(config.shape.radius, 6)}px;background:color-mix(in srgb, ${config.color.semantic[sem as 'success' | 'danger']} 16%, transparent);color:${config.color.semantic[sem as 'success' | 'danger']}`}
+													>{flag}</span
+												>
+											</div>
+										{/each}
+									</div>
+								</div>
+							</div>
+							<!-- example doc: H1/H2/H3/text/todo, the note editor's shape -->
+							<div class="border bg-card px-5 py-4" style={r}>
+								<div class="mb-2 flex items-center justify-between">
+									<span class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Document</span>
+									<span class="font-mono text-[9px] text-muted-foreground">● all changes saved</span>
+								</div>
+								<div style={headStyle(1)}>H2 in a note</div>
+								<p class="mt-1 text-foreground/85" style={bodyStyle}>
+									Writing feels right when the type does.
+								</p>
+								{#each ['Check the proofs', 'Send the invoice'] as todo, i (todo)}
+									<div class="mt-2 flex items-center gap-2.5">
+										<span
+											class="grid size-[17px] place-items-center border-[1.5px]"
+											style={`border-radius:${Math.min(config.shape.radius, 5)}px;${i === 0 ? `background:${config.color.semantic.success};border-color:${config.color.semantic.success}` : 'border-color:var(--border)'}`}
+										>
+											{#if i === 0}<span class="text-[11px] leading-none text-white">✓</span>{/if}
+										</span>
+										<span class="text-[13.5px] {i === 0 ? 'text-muted-foreground line-through' : ''}" style={`font-family:${fontStack(t.bodyFont)}`}>{todo}</span>
+									</div>
+								{/each}
+								<a href="/admin/design" class="mt-3 inline-block text-[13px] underline underline-offset-3" style={`color:${palette.accent}`}>A link, in accent</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
 
 		<section class="mb-8">
 			<div class={sectionHead}>

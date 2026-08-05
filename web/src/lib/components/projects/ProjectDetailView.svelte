@@ -12,7 +12,9 @@
 		filePreview,
 		initials,
 		LINK_CODE_MAP,
-		type Project
+		type FileStatus,
+		type Project,
+		type ProjFile
 	} from '$lib/projects/data';
 	import { kindInfo } from '$lib/projects/kinds';
 	import {
@@ -31,6 +33,7 @@
 	import LayoutPanelLeft from '@lucide/svelte/icons/layout-panel-left';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import Pin from '@lucide/svelte/icons/pin';
 	import X from '@lucide/svelte/icons/x';
 
 	let { t, p }: { t: Tracker; p: Project } = $props();
@@ -39,9 +42,10 @@
 	const du = $derived(dueInfo(p.due, p.status));
 	const h = $derived(healthVM(p.health));
 	const pct = $derived(progress(p));
-	const showRundown = $derived(t.wsTab === 'rundown');
-
 	const info = $derived(kindInfo(p.kind));
+	// wsTab can be left on 'rundown' by a previous project; a kind with no
+	// rundown always shows its overview.
+	const showRundown = $derived(t.wsTab === 'rundown' && info.rundownLabel !== null);
 	const fam = $derived(info.family);
 
 	const doneCount = $derived(p.tasks.filter((x) => x.done).length);
@@ -64,11 +68,88 @@
 	const folder = $derived(inheritedPath(p, t.projects));
 	const links = $derived(p.details?.links ?? []);
 
+	// Per-file lifecycle: draft → final → archived, stored by rel path.
+	// Archived files leave the cards and the hero but stay one toggle away.
+	const fileStatus = $derived(p.details?.fileStatus ?? {});
+	const statusOf = (f: ProjFile): FileStatus | undefined => (f.rel ? fileStatus[f.rel] : undefined);
+	const activeFiles = $derived(p.files.filter((f) => statusOf(f) !== 'archived'));
+	const archivedFiles = $derived(p.files.filter((f) => statusOf(f) === 'archived'));
+	let showArchived = $state(false);
+	const STATUS_META: Record<FileStatus, { label: string; color: string }> = {
+		draft: { label: 'DRAFT', color: '#c68a1a' },
+		final: { label: 'FINAL', color: '#2f7d5b' },
+		archived: { label: 'ARCHIVED', color: '#8a8474' }
+	};
+	const NEXT_STATUS: Record<FileStatus, FileStatus | undefined> = {
+		draft: 'final',
+		final: 'archived',
+		archived: undefined
+	};
+	const cycleStatus = (f: ProjFile) => {
+		if (!f.rel) return;
+		const cur = statusOf(f);
+		t.setFileStatus(p.id, f.rel, cur ? NEXT_STATUS[cur] : 'draft');
+	};
+
 	// Visual family: images/videos become a tile grid; everything else stays rows.
 	const gridFiles = $derived(
-		fam === 'visual' ? p.files.filter((f) => f.rel && (f.kind === 'image' || f.kind === 'video')) : []
+		fam === 'visual'
+			? activeFiles.filter((f) => f.rel && (f.kind === 'image' || f.kind === 'video'))
+			: []
 	);
-	const rowFiles = $derived(p.files.filter((f) => !gridFiles.includes(f)));
+	const rowFiles = $derived(activeFiles.filter((f) => !gridFiles.includes(f)));
+
+	// Hero: the pinned cover wins; otherwise the newest previewable file. The
+	// medium leads the page (design pass, note 568) — a graphic opens on its
+	// image, a track on its player, an album on its artwork.
+	type DiskFile = ProjFile & { rel: string };
+	const newestOrPinned = (pool: DiskFile[]): DiskFile | undefined => {
+		if (!pool.length) return undefined;
+		const pinned = p.details?.cover ? pool.find((f) => f.rel === p.details?.cover) : undefined;
+		return pinned ?? [...pool].sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))[0];
+	};
+	const heroFile = $derived(
+		newestOrPinned(
+			activeFiles.filter((f): f is DiskFile => !!f.rel && (f.kind === 'image' || f.kind === 'video'))
+		)
+	);
+	const heroAudio = $derived(
+		newestOrPinned(activeFiles.filter((f): f is DiskFile => !!f.rel && f.kind === 'audio'))
+	);
+	const heroPinned = $derived(!!heroFile && p.details?.cover === heroFile.rel);
+	const hostOf = (u: string) => {
+		try {
+			return new URL(u).host;
+		} catch {
+			return u;
+		}
+	};
+
+	// Inventory: stock rows and their value roll-up. Low = at/below the row's
+	// own threshold (merch.low_stock_at); rows without one never flag.
+	const isLow = (m: { stock: number; lowAt?: number }) => m.lowAt != null && m.stock <= m.lowAt;
+	const usd = (n: number | undefined) =>
+		n == null ? '—' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+	const invTotals = $derived.by(() => {
+		let units = 0,
+			cost = 0,
+			retail = 0;
+		for (const m of p.merch) {
+			units += m.stock;
+			if (m.cost != null) cost += m.stock * m.cost;
+			if (m.price != null) retail += m.stock * m.price;
+		}
+		return { units, cost, retail, margin: retail - cost, low: p.merch.filter(isLow).length };
+	});
+	function submitMerch() {
+		if (!merchDraft.name.trim()) return;
+		void t.addMerch(p.id, {
+			name: merchDraft.name,
+			stock: merchDraft.stock === '' ? 0 : Number(merchDraft.stock),
+			price: merchDraft.price === '' ? undefined : Number(merchDraft.price)
+		});
+		merchDraft = { name: '', stock: '', price: '' };
+	}
 
 	const todayISO = new Date().toISOString().slice(0, 10);
 	// Each Up Next kind gets its own color so the list scans at a glance.
@@ -106,6 +187,8 @@
 	let dlDraft = $state({ name: '', spec: '' });
 	let noteDraft = $state('');
 	let evDraft = $state({ title: '', when: '', location: '' });
+	let merchDraft = $state({ name: '', stock: '', price: '' });
+	let merchSel = $state('');
 	let personSel = $state('');
 	let personDraft = $state('');
 
@@ -201,6 +284,21 @@
 				<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground"
 					>{kindLabel}</span
 				>
+				{#if info.subkinds.length}
+					<!-- Subkind: emphasis within the kind (Logo vs Thumbnail), edited in
+					     place like every other header field. Empty stays quiet. -->
+					<select
+						value={p.subkind ?? ''}
+						onchange={(e) => t.setSubkind(p.id, e.currentTarget.value)}
+						aria-label="Project subcategory"
+						class="cursor-pointer appearance-none rounded-[6px] border bg-card px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] outline-none hover:border-ring/40 {p.subkind
+							? 'text-foreground/70'
+							: 'text-muted-foreground/70'}"
+					>
+						<option value="">/ subkind</option>
+						{#each info.subkinds as sk (sk)}<option value={sk}>{sk}</option>{/each}
+					</select>
+				{/if}
 				{#if parent}
 					<button
 						onclick={() => t.openProject(parent.id)}
@@ -312,21 +410,23 @@
 		{/each}
 	</div>
 
-	<!-- Overview / rundown tabs -->
-	<div class="mb-[22px] inline-flex gap-0.5 rounded-[9px] bg-muted p-[3px]">
-		<button
-			onclick={() => (t.wsTab = 'overview')}
-			class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab !== 'rundown'
-				? 'bg-primary text-primary-foreground'
-				: 'text-foreground/70'}">Overview</button
-		>
-		<button
-			onclick={() => (t.wsTab = 'rundown')}
-			class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab === 'rundown'
-				? 'bg-primary text-primary-foreground'
-				: 'text-foreground/70'}">{info.rundownLabel}</button
-		>
-	</div>
+	<!-- Overview / rundown tabs — only kinds with a rundown get the toggle -->
+	{#if info.rundownLabel !== null}
+		<div class="mb-[22px] inline-flex gap-0.5 rounded-[9px] bg-muted p-[3px]">
+			<button
+				onclick={() => (t.wsTab = 'overview')}
+				class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab !== 'rundown'
+					? 'bg-primary text-primary-foreground'
+					: 'text-foreground/70'}">Overview</button
+			>
+			<button
+				onclick={() => (t.wsTab = 'rundown')}
+				class="cursor-pointer rounded-[7px] px-4 py-2 text-[12px] font-semibold {t.wsTab === 'rundown'
+					? 'bg-primary text-primary-foreground'
+					: 'text-foreground/70'}">{info.rundownLabel}</button
+			>
+		</div>
+	{/if}
 
 	{#if showRundown}
 		<ProjectRundown {t} {p} />
@@ -1036,6 +1136,22 @@
 			</div>
 		{/snippet}
 
+		{#snippet statusChip(f: ProjFile)}
+			{@const st = statusOf(f)}
+			{#if f.rel}
+				<button
+					onclick={() => cycleStatus(f)}
+					title={st
+						? `${STATUS_META[st].label} — click to advance (draft → final → archived)`
+						: 'Mark as draft (click again for final, then archived)'}
+					class="flex-none cursor-pointer rounded-full px-2 py-[2px] font-mono text-[9px] font-semibold uppercase tracking-[0.05em] {st
+						? 'text-white'
+						: 'border text-muted-foreground/70 opacity-0 group-hover:opacity-100'}"
+					style={st ? `background:${STATUS_META[st].color};` : ''}>{st ? STATUS_META[st].label : '+ status'}</button
+				>
+			{/if}
+		{/snippet}
+
 		{#snippet filesC()}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -1083,30 +1199,59 @@
 				{#if gridFiles.length}
 					<div class="mb-2 grid grid-cols-3 gap-2.5 pt-1.5 sm:grid-cols-4">
 						{#each gridFiles as f (f.rel)}
-							<button
-								onclick={() => t.openLocal(p.id, f.rel)}
-								title="Open {f.name} in native app"
-								class="group/tile relative aspect-square cursor-pointer overflow-hidden rounded-[10px] border bg-muted"
-							>
-								<img
-									src="/projects/{p.id}/thumb?p={encodeURIComponent(f.rel!)}&w=300&v={t.fileVer[p.id] ?? 0}"
-									alt={f.name}
-									loading="lazy"
-									class="h-full w-full object-cover transition-transform duration-200 group-hover/tile:scale-105"
-								/>
+							{@const isCover = p.details?.cover === f.rel}
+							{@const st = statusOf(f)}
+							<div class="group/tile relative aspect-square overflow-hidden rounded-[10px] border bg-muted">
+								<button
+									onclick={() => t.openLocal(p.id, f.rel)}
+									title="Open {f.name} in native app"
+									class="block h-full w-full cursor-pointer"
+								>
+									<img
+										src="/projects/{p.id}/thumb?p={encodeURIComponent(f.rel!)}&w=300&v={t.fileVer[p.id] ?? 0}"
+										alt={f.name}
+										loading="lazy"
+										class="h-full w-full object-cover transition-transform duration-200 group-hover/tile:scale-105"
+									/>
+								</button>
+								<button
+									onclick={() => cycleStatus(f)}
+									title={st
+										? `${STATUS_META[st].label} — click to advance`
+										: 'Mark as draft (click again for final, then archived)'}
+									class="absolute left-1.5 top-1.5 {st
+										? 'block'
+										: 'hidden group-hover/tile:block'} cursor-pointer rounded-full px-1.5 py-[2px] font-mono text-[8px] font-bold uppercase tracking-[0.05em] text-white"
+									style="background:{st ? STATUS_META[st].color : 'rgba(0,0,0,.55)'};"
+									>{st ? STATUS_META[st].label : '+'}</button
+								>
+								<button
+									onclick={() => t.setCover(p.id, isCover ? undefined : f.rel)}
+									title={isCover ? 'Unpin cover' : 'Pin as cover'}
+									class="absolute right-1.5 top-1.5 {isCover
+										? 'grid'
+										: 'hidden group-hover/tile:grid'} size-6 cursor-pointer place-items-center rounded-[6px] bg-black/55 text-white hover:bg-black/75"
+								>
+									<Pin class="size-3 {isCover ? 'fill-current' : ''}" />
+								</button>
 								<span
-									class="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-1 text-left font-mono text-[9px] text-white opacity-0 transition-opacity group-hover/tile:opacity-100"
+									class="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-1 text-left font-mono text-[9px] text-white opacity-0 transition-opacity group-hover/tile:opacity-100"
 									>{f.name}</span
 								>
-							</button>
+							</div>
 						{/each}
 					</div>
 				{/if}
 				{#each rowFiles as f (f.rel ?? f.name)}
 					{#if f.kind === 'audio' && f.rel}
-						{#key f.rel}
-							<AudioFileRow {t} pid={p.id} file={f} />
-						{/key}
+						<div class="group flex items-center gap-2 border-t first:border-t-0">
+							<div class="min-w-0 flex-1">
+								{#key f.rel}
+									<AudioFileRow {t} pid={p.id} file={f} />
+								{/key}
+							</div>
+							{@render statusChip(f)}
+						</div>
 					{:else}
 						{@const pv = filePreview(f.name)}
 						<div class="group flex items-center gap-3 border-t py-2.5 first:border-t-0">
@@ -1115,13 +1260,14 @@
 								<div class="truncate text-[13.5px]">{f.name}</div>
 								<div class="mt-[3px] font-mono text-[10px] text-muted-foreground">{pv.ext} · {f.meta}</div>
 							</div>
+							{@render statusChip(f)}
 							{#if f.rel}
 								<FileRowActions {t} pid={p.id} file={f} />
 							{/if}
 						</div>
 					{/if}
 				{:else}
-					{#if !gridFiles.length}
+					{#if !gridFiles.length && !archivedFiles.length}
 						<div class="pt-1.5 text-[13px] text-muted-foreground">
 							{#if folder.value}
 								No files yet — drop them on this card, or use <span class="font-mono text-[11px]">+ ADD FILES</span>.
@@ -1135,6 +1281,28 @@
 						</div>
 					{/if}
 				{/each}
+				<!-- Archived: out of the way, never gone. -->
+				{#if archivedFiles.length}
+					<div class="mt-2 border-t pt-2.5">
+						<button onclick={() => (showArchived = !showArchived)} class={ghostBtn}>
+							{showArchived ? '▾ HIDE' : '▸ SHOW'}
+							{archivedFiles.length} ARCHIVED
+						</button>
+						{#if showArchived}
+							{#each archivedFiles as f (f.rel ?? f.name)}
+								<div class="flex items-center gap-3 py-1.5 opacity-60">
+									<MediaThumb pid={p.id} file={f} size={28} ver={t.fileVer[p.id] ?? 0} />
+									<span class="min-w-0 flex-1 truncate text-[13px]">{f.name}</span>
+									<button
+										onclick={() => f.rel && t.setFileStatus(p.id, f.rel, undefined)}
+										title="Unarchive — back into the card with no status"
+										class={ghostBtn}>RESTORE</button
+									>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/snippet}
 
@@ -1173,24 +1341,276 @@
 			</div>
 		{/snippet}
 
+		{#snippet heroC()}
+			<!-- Visual kinds: the work IS the page. Pinned cover or newest file. -->
+			{#if heroFile}
+				<div class="relative overflow-hidden rounded-[12px] border bg-muted">
+					<button
+						onclick={() => {
+							const f = heroFile;
+							if (f) t.openLocal(p.id, f.rel);
+						}}
+						title="Open {heroFile.name} in native app"
+						class="block w-full cursor-pointer"
+					>
+						<img
+							src="/projects/{p.id}/thumb?p={encodeURIComponent(heroFile.rel)}&w=1400&v={t.fileVer[
+								p.id
+							] ?? 0}"
+							alt={heroFile.name}
+							class="max-h-[440px] w-full bg-muted object-contain"
+						/>
+					</button>
+					<div
+						class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/55 to-transparent px-4 pb-2.5 pt-8"
+					>
+						<span class="truncate font-mono text-[10px] text-white/90">{heroFile.name}</span>
+						<button
+							onclick={() => {
+								const f = heroFile;
+								if (f) t.setCover(p.id, heroPinned ? undefined : f.rel);
+							}}
+							title={heroPinned ? 'Unpin — newest file takes over' : 'Pin this as the cover'}
+							class="inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-[6px] border border-white/30 bg-black/30 px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-white hover:bg-black/55"
+						>
+							<Pin class="size-3 {heroPinned ? 'fill-current' : ''}" />{heroPinned
+								? 'PINNED'
+								: 'PIN AS COVER'}
+						</button>
+					</div>
+				</div>
+			{/if}
+		{/snippet}
+
+		{#snippet artworkC()}
+			<!-- Music rail: square artwork, same pin behavior as the visual hero. -->
+			{#if heroFile}
+				<div class="group/art relative overflow-hidden rounded-[12px] border bg-muted">
+					<button
+						onclick={() => {
+							const f = heroFile;
+							if (f) t.openLocal(p.id, f.rel);
+						}}
+						title="Open {heroFile.name} in native app"
+						class="block w-full cursor-pointer"
+					>
+						<img
+							src="/projects/{p.id}/thumb?p={encodeURIComponent(heroFile.rel)}&w=600&v={t.fileVer[
+								p.id
+							] ?? 0}"
+							alt={heroFile.name}
+							class="aspect-square w-full object-cover"
+						/>
+					</button>
+					<button
+						onclick={() => {
+							const f = heroFile;
+							if (f) t.setCover(p.id, heroPinned ? undefined : f.rel);
+						}}
+						title={heroPinned ? 'Unpin cover' : 'Pin as cover'}
+						class="absolute right-2 top-2 {heroPinned
+							? 'grid'
+							: 'hidden group-hover/art:grid'} size-7 cursor-pointer place-items-center rounded-[7px] bg-black/55 text-white hover:bg-black/75"
+					>
+						<Pin class="size-3.5 {heroPinned ? 'fill-current' : ''}" />
+					</button>
+				</div>
+			{/if}
+		{/snippet}
+
+		{#snippet playerC()}
+			<!-- A track leads with its latest bounce, playable in place. -->
+			{#if heroAudio}
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-1.5">LATEST AUDIO</div>
+					{#key heroAudio.rel}
+						<AudioFileRow {t} pid={p.id} file={heroAudio} />
+					{/key}
+				</div>
+			{/if}
+		{/snippet}
+
+		{#snippet launchpadC()}
+			<!-- Software leads with where it lives: links as buttons, not rows. -->
+			<div class={cardClass}>
+				<div class="{sectionLabel} mb-3">LAUNCHPAD</div>
+				{#if links.length}
+					<div class="grid gap-2.5 sm:grid-cols-2">
+						{#each links as l (l.url)}
+							<a
+								href={l.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="group/lp flex items-center justify-between gap-2 rounded-[10px] border bg-card px-4 py-3 hover:border-ring/40 hover:bg-accent"
+							>
+								<span class="min-w-0">
+									<span class="block truncate text-[14px] font-semibold">{l.label}</span>
+									<span class="block truncate font-mono text-[10px] text-muted-foreground"
+										>{hostOf(l.url)}</span
+									>
+								</span>
+								<ArrowUpRight
+									class="size-4 flex-none text-muted-foreground group-hover/lp:text-foreground/80"
+								/>
+							</a>
+						{/each}
+					</div>
+				{:else}
+					<div class="text-[13px] text-muted-foreground">
+						Live site, repo, staging, brief — add them under Links and they become buttons here.
+					</div>
+				{/if}
+			</div>
+		{/snippet}
+
+		{#snippet stockC()}
+			<!-- Inventory leads with the count that matters: what's on hand. Rows
+			     are real Merch records; stock edits write straight back. -->
+			<div class={cardClass}>
+				<div class="{sectionLabel} mb-1.5 flex items-center gap-2">
+					STOCK
+					{#if p.merch.length}<span class="text-muted-foreground/70">· {p.merch.length} items</span
+						>{/if}
+					{#if invTotals.low}
+						<span class="font-mono text-[10px] text-destructive">{invTotals.low} LOW</span>
+					{/if}
+				</div>
+				{#each p.merch as m (m.id)}
+					<div class="group/mr flex items-center gap-3 border-t py-2 first:border-t-0">
+						<a href="/merch/{m.id}" class="min-w-0 flex-1 truncate text-[14px] hover:underline"
+							>{m.name}</a
+						>
+						{#if m.category}
+							<span
+								class="flex-none rounded-full bg-accent px-2 py-[2px] font-mono text-[9px] uppercase tracking-[0.05em] text-foreground/70"
+								>{m.category}</span
+							>
+						{/if}
+						<input
+							type="number"
+							value={m.stock}
+							min="0"
+							onchange={(e) => t.updateMerch(p.id, m.id, { stock: Number(e.currentTarget.value) })}
+							aria-label="Stock on hand"
+							class="{ghost} w-[62px] flex-none px-1 py-0.5 text-right font-mono text-[13px]"
+						/>
+						<span
+							class="w-[38px] flex-none rounded-full px-1.5 py-[2px] text-center font-mono text-[9px] uppercase text-white"
+							style="background:{isLow(m) ? '#b5473c' : '#2f7d5b'};"
+							title={m.lowAt != null ? `Flags low at ${m.lowAt}` : 'No low-stock threshold set'}
+							>{isLow(m) ? 'LOW' : 'OK'}</span
+						>
+						<span class="w-[56px] flex-none text-right font-mono text-[12px] text-foreground/70"
+							>{usd(m.price)}</span
+						>
+						<button
+							onclick={() => t.unlinkMerch(p.id, m.id)}
+							title="Unlink from this project (keeps the merch record)"
+							class="{rowX} group-hover/mr:block"><X class="size-3.5" /></button
+						>
+					</div>
+				{:else}
+					<div class="pt-1.5 text-[13px] text-muted-foreground">
+						No stock yet — add items here, or link rows from the Merch database.
+					</div>
+				{/each}
+				<div class="mt-2 flex flex-wrap items-center gap-2 border-t pt-3">
+					<input
+						bind:value={merchDraft.name}
+						onkeydown={(e) => e.key === 'Enter' && submitMerch()}
+						placeholder="Add an item…"
+						class="{addInput} min-w-[140px]"
+					/>
+					<input
+						bind:value={merchDraft.stock}
+						type="number"
+						min="0"
+						placeholder="qty"
+						aria-label="Starting stock"
+						class="{addInput} max-w-[70px] font-mono text-[12px]"
+					/>
+					<input
+						bind:value={merchDraft.price}
+						type="number"
+						min="0"
+						step="0.01"
+						placeholder="price"
+						aria-label="Unit price"
+						class="{addInput} max-w-[80px] font-mono text-[12px]"
+					/>
+					<button onclick={submitMerch} disabled={!merchDraft.name.trim()} class={addBtn}>Add</button>
+					{#if t.merchPool.length}
+						<select
+							bind:value={merchSel}
+							onchange={() => {
+								if (merchSel) t.linkMerch(p.id, merchSel);
+								merchSel = '';
+							}}
+							aria-label="Link an existing merch row"
+							class="max-w-[170px] flex-none rounded-[7px] border bg-card px-2 py-[7px] text-[12px] text-muted-foreground outline-none focus:border-ring"
+						>
+							<option value="">Link existing…</option>
+							{#each t.merchPool as m (m.id)}
+								<option value={m.id}>{m.name} ({m.stock})</option>
+							{/each}
+						</select>
+					{/if}
+				</div>
+			</div>
+		{/snippet}
+
+		{#snippet valueC()}
+			{#if p.merch.length}
+				{@const rows = [
+					{ label: 'UNITS ON HAND', value: String(invTotals.units) },
+					{ label: 'COST', value: usd(invTotals.cost) },
+					{ label: 'RETAIL', value: usd(invTotals.retail) },
+					{ label: 'MARGIN', value: usd(invTotals.margin) }
+				]}
+				<div class={cardClass}>
+					<div class="{sectionLabel} mb-2">VALUE</div>
+					{#each rows as r (r.label)}
+						<div class="flex items-center justify-between border-t py-2 first:border-t-0">
+							<span class="font-mono text-[10px] tracking-[0.06em] text-muted-foreground"
+								>{r.label}</span
+							>
+							<span class="font-mono text-[13px] font-semibold text-foreground/80">{r.value}</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/snippet}
+
+		<!-- Layout families (design pass, note 568): every page keeps the same
+		     spine above; below it the medium leads. Visual opens on the work
+		     itself, software on where-it-lives + what's-next, music on the
+		     player/tracklist, live on the run. Inventory opens on the stock table. -->
 		{@const left =
 			fam === 'visual'
-				? [filesC, phasesC, upNextC, tasksC, tracksC]
+				? [heroC, filesC, notesC, tasksC, tracksC]
 				: fam === 'software'
-					? [tasksC, phasesC, upNextC, milestonesC, tracksC]
+					? [launchpadC, filesC, tasksC, milestonesC, tracksC]
 					: fam === 'live'
-						? [phasesC, scheduleC, upNextC, tasksC, tracksC, milestonesC]
+						? [scheduleC, phasesC, upNextC, tasksC, tracksC, milestonesC]
 						: info.key === 'album'
 							? [tracksC, phasesC, upNextC, tasksC, milestonesC]
-							: [phasesC, upNextC, tasksC, tracksC, milestonesC]}
+							: info.key === 'inventory'
+								? [stockC, upNextC, tasksC, notesC, tracksC]
+								: fam === 'music'
+									? [playerC, phasesC, upNextC, tasksC, tracksC, milestonesC]
+									: [phasesC, upNextC, tasksC, tracksC, milestonesC]}
 		{@const right =
 			fam === 'visual'
-				? [detailsC, specsC, deliverablesC, scheduleC, milestonesC, peopleC, notesC, linksC, linkedC, activityC]
+				? [detailsC, phasesC, upNextC, specsC, deliverablesC, scheduleC, milestonesC, peopleC, linksC, linkedC, activityC]
 				: fam === 'software'
-					? [detailsC, linksC, scheduleC, notesC, peopleC, filesC, linkedC, activityC]
+					? [upNextC, phasesC, detailsC, linksC, scheduleC, notesC, peopleC, linkedC, activityC]
 					: fam === 'live'
 						? [detailsC, peopleC, notesC, filesC, linksC, linkedC, activityC]
-						: [detailsC, scheduleC, peopleC, notesC, filesC, linksC, linkedC, activityC]}
+						: info.key === 'inventory'
+							? [valueC, detailsC, phasesC, scheduleC, milestonesC, peopleC, filesC, linksC, linkedC, activityC]
+							: fam === 'music'
+								? [artworkC, detailsC, scheduleC, peopleC, notesC, filesC, linksC, linkedC, activityC]
+								: [detailsC, scheduleC, peopleC, notesC, filesC, linksC, linkedC, activityC]}
 		<div
 			class="grid items-start gap-5"
 			style={t.layout === 'console'

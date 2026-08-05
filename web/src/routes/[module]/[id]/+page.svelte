@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { deserialize, enhance } from '$app/forms';
 	import { beforeNavigate, goto } from '$app/navigation';
-	import NoteEditor from '$lib/components/editor/NoteEditor.svelte';
+	import MarkdownField from '$lib/components/MarkdownField.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toast } from 'svelte-sonner';
 	import type { PageData } from './$types';
@@ -59,12 +59,10 @@
 		(typeof item.path === 'string' && item.path) || (archive?.path as string | undefined) || null
 	);
 
-	// Markdown document (modules with a docField, i.e. notes): edited live in
-	// the block editor (formatting as you type, "/" menu), with a raw-markdown
-	// tab as the escape hatch. bodyText backs both and rides into the record
-	// form via a hidden input.
+	// The record's markdown document (modules with a docField). MarkdownField
+	// owns the editor and its Doc/Markdown tabs; bodyText rides into the record
+	// form via a hidden input below.
 	let bodyText = $state('');
-	let docTab = $state<'doc' | 'md'>('doc');
 	// Sync from the record only when it's a different record — a refresh of the
 	// same item must never clobber text being typed right now.
 	let bodyDocId: unknown;
@@ -567,64 +565,29 @@
 
 	{#if mod.docField}
 		<section class="flex max-w-5xl flex-col gap-3 rounded-[12px] border bg-card px-6 py-5">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-3">
-					<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">DOCUMENT</div>
-					<div class="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-						<span
-							class={cn(
-								'size-1.5 rounded-full',
-								saveState === 'saved' && 'bg-[#2f7d5b]',
-								saveState === 'error' && 'bg-destructive',
-								(saveState === 'pending' || saveState === 'saving') && 'animate-pulse bg-signal'
-							)}
-						></span>
-						{saveLabel[saveState]}
-					</div>
-				</div>
-				<div class="inline-flex gap-0.5 rounded-[8px] bg-muted p-[3px]">
-					<button
-						type="button"
-						onclick={() => (docTab = 'doc')}
-						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'doc'
-							? 'bg-primary text-primary-foreground'
-							: 'text-foreground/70'}">Doc</button
-					>
-					<button
-						type="button"
-						onclick={() => (docTab = 'md')}
-						class="cursor-pointer rounded-[6px] px-3 py-1 text-[11px] font-semibold {docTab === 'md'
-							? 'bg-primary text-primary-foreground'
-							: 'text-foreground/70'}">Markdown</button
-					>
-				</div>
-			</div>
-			{#if docTab === 'md'}
-				<textarea
-					bind:value={bodyText}
-					oninput={() => scheduleSave()}
-					onkeydown={(e) => {
-						if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-							e.preventDefault();
-							saveDoc();
-						}
-					}}
-					rows={Math.min(28, Math.max(10, bodyText.split('\n').length + 3))}
-					placeholder="Raw markdown…"
-					class="w-full resize-y rounded-[9px] border bg-background px-3.5 py-3 font-mono text-[13px] leading-[1.6] outline-none focus:border-ring"
-				></textarea>
-			{:else}
-				{#key `${item.id}:${docTab}`}
-					<NoteEditor
-						value={bodyText}
-						onchange={(md) => {
-							bodyText = md;
-							scheduleSave();
-						}}
-						onsave={saveDoc}
-					/>
-				{/key}
-			{/if}
+			{#key item.id}
+				<MarkdownField bind:value={bodyText} onchange={() => scheduleSave()} onsave={saveDoc}>
+					{#snippet header()}
+						<div class="flex items-center gap-3">
+							<div class="font-mono text-[10px] tracking-[0.12em] text-muted-foreground">
+								DOCUMENT
+							</div>
+							<div class="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+								<span
+									class={cn(
+										'size-1.5 rounded-full',
+										saveState === 'saved' && 'bg-[#2f7d5b]',
+										saveState === 'error' && 'bg-destructive',
+										(saveState === 'pending' || saveState === 'saving') &&
+											'animate-pulse bg-signal'
+									)}
+								></span>
+								{saveLabel[saveState]}
+							</div>
+						</div>
+					{/snippet}
+				</MarkdownField>
+			{/key}
 			<div class="font-mono text-[10px] text-muted-foreground">
 				Type '/' for blocks · markdown shortcuts as you type · saves automatically
 			</div>

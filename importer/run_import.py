@@ -23,6 +23,13 @@ from app.db import engine, init_db
 from importer import notion as nd
 from importer.mappings import SPECS, Spec
 
+# Column names Notion writes a page's creation timestamp under, most specific
+# first. It is only ever present when the database defined it as a property —
+# the export carries no intrinsic per-page creation time, and the exported
+# files' mtimes are all the export date. Applied to every spec: a database
+# without one just keeps the import time.
+CREATED_COLS = ("Created Date", "Created time", "Created")
+
 TITLE_FIELD = {  # which model attr holds the display title
     "todos": "title", "notes": "title", "events": "title", "media": "title",
     "hardware": "name", "software": "name", "projects": "name", "people": "name",
@@ -69,6 +76,17 @@ def build_kwargs(spec: Spec, row: dict, bodies: dict[str, str]) -> dict | None:
             kwargs["body"] = body
     kwargs["source"] = spec.source
     kwargs["raw"] = {k: v for k, v in row.items() if v not in (None, "")}
+    # When the page carries its own creation time, that is the row's real
+    # created_at. Left alone it would be the moment of the import run, which
+    # collapses five years of archive onto one afternoon and makes "newest
+    # first" meaningless. Recorded twice on purpose: created_at always has a
+    # value, source_created_at stays null when the export knew nothing.
+    for col in CREATED_COLS:
+        created = nd.parse_datetime(row.get(col))
+        if created:
+            kwargs["created_at"] = created
+            kwargs["source_created_at"] = created
+            break
     return kwargs
 
 

@@ -1,15 +1,17 @@
 import traceback
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, func, select
 
 from app import logs, models
+from app.custom import make_custom_routers
 from app.db import engine, init_db
 from app.health import db_health, path_health
 from app.inherit import decorate_projects
+from app.revisions import router as revisions_router
 from app.routers import make_crud_router
 
 
@@ -46,14 +48,26 @@ ORDER_OVERRIDES = {"events": ("starts_at", True)}  # (field, descending)
 # Read-only fields computed from other rows on the way out (app/inherit.py).
 DECORATORS = {"projects": decorate_projects}
 
+# Modules whose old state checkpoints before an update overwrites it — the
+# ones where a lost body/document is real work gone (see app/revisions.py).
+REVISIONED = {"notes", "projects"}
+
 for model, name, title_field in MODULES:
     order_by, desc = ORDER_OVERRIDES.get(name, (None, False))
     app.include_router(
         make_crud_router(
             model, name, title_field,
             order_by=order_by, desc=desc, decorate=DECORATORS.get(name),
+            revisions=name in REVISIONED,
         )
     )
+
+# User-defined tables: /tables (schema registry) + /x/{key} (row CRUD).
+for router in make_custom_routers({name for _, name, _ in MODULES}):
+    app.include_router(router)
+
+# Record history: list checkpoints, read one back.
+app.include_router(revisions_router)
 
 
 # Modules whose rows point at an on-disk folder, for the admin path check.
@@ -335,10 +349,50 @@ def dashboard():
             )
 
         # Notes you actually touched, newest first — imported rows sink as soon
-        # as anything real is edited.
+        # as anything real is edited. The newest weekly note pins to the top:
+        # it's the running workspace, so it should never scroll out of reach,
+        # and each new week's note takes the spot from the last.
+        current_weekly = session.exec(
+            select(N)
+            .where(N.kind == "weekly")
+            .order_by(func.coalesce(N.meeting_time, N.created_at).desc())
+            .limit(1)
+        ).first()
         recent_notes = session.exec(
             select(N).order_by(func.coalesce(N.updated_at, N.created_at).desc()).limit(6)
         ).all()
+        if current_weekly:
+            recent_notes = [current_weekly] + [n for n in recent_notes if n.id != current_weekly.id]
+            recent_notes = recent_notes[:6]
+
+        # Where you left off — the records most recently written to, across the
+        # modules where work actually happens (note bodies, project documents,
+        # show sheets). Todos stay out: quick capture stamps one every time, and
+        # a captured stray isn't a place to resume. The current weekly is out
+        # too — it's pinned in the notes rail and would hold a slot forever.
+        # The cutoff keeps the strip empty rather than dredging up rows whose
+        # updated_at is just the import run.
+        cutoff = models.utcnow() - timedelta(days=14)
+        activity: list[dict] = []
+        for model, mod, title_field in ((N, "notes", "title"), (P, "projects", "name"), (E, "events", "title")):
+            for row in session.exec(
+                select(model)
+                .where(model.updated_at >= cutoff)
+                .order_by(model.updated_at.desc())
+                .limit(4)
+            ).all():
+                if mod == "notes" and current_weekly and row.id == current_weekly.id:
+                    continue
+                activity.append(
+                    {
+                        "module": mod,
+                        "id": row.id,
+                        "title": getattr(row, title_field),
+                        "kind": getattr(row, "kind", None),
+                        "updated_at": row.updated_at,
+                    }
+                )
+        activity.sort(key=lambda a: a["updated_at"], reverse=True)
 
         overdue = session.exec(
             select(T).where(T.due.is_not(None), T.due < today, not_done).order_by(T.due.asc()).limit(6)
@@ -348,9 +402,30 @@ def dashboard():
         ).one()
         open_total = session.exec(select(func.count()).select_from(T).where(not_done)).one()
 
+        # The day's score so far: todos actually finished today. "Done" only,
+        # not "archived" — archiving old junk is cleanup, not momentum.
+        # updated_at is stamped UTC, so today's local midnight converts before
+        # the comparison. A text edit to an already-done todo re-counts it;
+        # close enough for a morale number.
+        midnight_utc = (
+            datetime.combine(today, time.min)
+            .astimezone()
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
+        done_today = session.exec(
+            select(func.count())
+            .select_from(T)
+            .where(
+                func.lower(func.coalesce(T.status, "")) == "done",
+                T.updated_at >= midnight_utc,
+            )
+        ).one()
+
     return {
         "today": today.isoformat(),
         "threads": threads,
+        "recent_activity": activity[:3],
         "recent_notes": [
             _brief(n, ("id", "title", "kind", "updated_at", "project_id")) for n in recent_notes
         ],
@@ -359,4 +434,5 @@ def dashboard():
             "undated": undated,
             "open_total": open_total,
         },
+        "done_today": done_today,
     }

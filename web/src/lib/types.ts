@@ -19,6 +19,11 @@ export interface FieldSpec {
 	ref?: string; // for relation: the module key this field links to
 	required?: boolean;
 	placeholder?: string;
+	// textarea only: edit it as a document (block editor, "/" menu, tables,
+	// buttons) instead of a plain box with a preview toggle. Worth it where the
+	// field is prose someone will structure; overkill on a one-line label. The
+	// stored value is markdown either way, so this is safe to flip per field.
+	rich?: boolean;
 }
 
 // A pickable option for a relation field: another record's id + display label.
@@ -46,6 +51,10 @@ export interface Column {
 
 export interface ModuleConfig {
 	key: string; // url segment + API endpoint + /stats key
+	// Custom tables (built in Admin → Data) serve their rows behind /x/<key>,
+	// so the API path differs from the url segment. Omitted for built-ins.
+	endpoint?: string;
+	custom?: boolean; // synthesized from a custom_tables row at load time
 	label: string; // plural display name
 	singular: string; // used for "New <singular>"
 	titleField: string; // 'title' | 'name'
@@ -139,9 +148,50 @@ export interface Thread {
 	opens_at: string | null;
 	unadvanced: number;
 }
+// One item picked in the start-of-day ritual: a weekly-note task (anchored by
+// line + text, same convention as the checklist toggle) or a live thread.
+export type FocusItem =
+	| { kind: 'task'; text: string; line: number }
+	| { kind: 'thread'; id: number; name: string };
+// The day's plan, stored as the `day_focus` settings blob. A stale date means
+// yesterday's plan — the overview ignores it and offers the ritual again.
+export interface DayFocus {
+	date: string;
+	items: FocusItem[];
+}
+// One checkbox line from the weekly note's checklist. `line` anchors the
+// toggle action's edit; `depth`/`parent` carry the subtask relationship
+// (indented checkboxes) so a subtask can render under — or name — its parent.
+export interface WeekTask {
+	text: string;
+	done: boolean;
+	line: number;
+	depth: number;
+	parent: string | null;
+}
+// A running work session, stored as the `work_session` settings blob.
+// started_at is UTC ISO; ending the session turns the elapsed time into a
+// "## Log" line in the weekly note.
+export interface WorkSession {
+	started_at: string;
+	label: string;
+}
+// One recently-written record — the trail behind the overview's
+// "pick back up" strip.
+export interface ActivityBrief {
+	module: 'notes' | 'projects' | 'events';
+	id: number;
+	title: string;
+	kind: string | null;
+	updated_at: string;
+}
 export interface DashboardData {
 	today: string;
 	threads: Thread[];
+	recent_activity: ActivityBrief[];
 	recent_notes: NoteBrief[];
 	loose: { overdue: TodoBrief[]; undated: number; open_total: number };
+	// Todos closed today — half of the header's "done today" tally (the other
+	// half, week tasks checked today, is the day_tally settings blob).
+	done_today: number;
 }

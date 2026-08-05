@@ -29,5 +29,7 @@ export const persist = {
 	noteDelete: (id: string) => send({ op: 'note-delete', id }),
 	eventCreate: (data: Row) => send({ op: 'event-create', data }),
 	eventDelete: (id: string) => send({ op: 'event-delete', id }),
-	personCreate: (data: Row) => send({ op: 'person-create', data })
+	personCreate: (data: Row) => send({ op: 'person-create', data }),
+	merch: (id: string, patch: Row) => send({ op: 'merch', id, patch }),
+	merchCreate: (data: Row) => send({ op: 'merch-create', data })
 };

@@ -4,7 +4,7 @@
 // `app/models.py` (the editable columns). To surface a new module, register it
 // here and in the backend. `columns` drive the list table; `fields` drive the
 // add/edit form.
-import type { ModuleConfig } from '$lib/types';
+import type { Column, FieldSpec, ModuleConfig, ViewKind } from '$lib/types';
 import { STATE } from '$lib/status';
 
 export const MODULES: ModuleConfig[] = [
@@ -66,6 +66,13 @@ export const MODULES: ModuleConfig[] = [
 		columns: [
 			{ header: 'Title', field: 'title' },
 			{ header: 'Kind', field: 'kind', render: 'badge' },
+			// When the note was really written, blank where the export recorded
+			// nothing (see Base.source_created_at). Deliberately not created_at:
+			// that always has a value, so page imports would claim to be the
+			// newest thing here instead of sorting last like anything undated.
+			// Only ~60% of notes ever had a "When", which left everything else in
+			// one alphabetical block at the bottom.
+			{ header: 'Created', field: 'source_created_at', sort: 'date' },
 			{ header: 'When', field: 'meeting_time', sort: 'date' },
 			{ header: 'Status', field: 'status', render: 'badge' },
 			{ header: 'Type', field: 'meeting_type' },
@@ -118,7 +125,7 @@ export const MODULES: ModuleConfig[] = [
 			'Needs Attention': STATE.attention,
 			Completed: STATE.done
 		},
-		defaultSort: { field: 'meeting_time', dir: 'desc' }
+		defaultSort: { field: 'source_created_at', dir: 'desc' }
 	},
 	{
 		key: 'events',
@@ -341,7 +348,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'due', label: 'Due', type: 'date' },
 			{ name: 'year', label: 'Year', type: 'text' },
 			{ name: 'path', label: 'Folder path', type: 'text' },
-			{ name: 'description', label: 'Description', type: 'textarea' },
+			{ name: 'description', label: 'Description', type: 'textarea', rich: true },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group'],
@@ -450,7 +457,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'found_via', label: 'Found via', type: 'text' },
 			{ name: 'track', label: 'Track', type: 'text' },
 			{ name: 'next_action', label: 'Next action', type: 'text' },
-			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'notes', label: 'Notes', type: 'textarea', rich: true },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group', 'calendar'],
@@ -568,7 +575,7 @@ export const MODULES: ModuleConfig[] = [
 			},
 			{ name: 'url', label: 'URL', type: 'text' },
 			{ name: 'via', label: 'Found via', type: 'text' },
-			{ name: 'notes', label: 'Notes', type: 'textarea' },
+			{ name: 'notes', label: 'Notes', type: 'textarea', rich: true },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group'],
@@ -672,3 +679,69 @@ export const MODULE_CODES: Record<string, string> = {
 	incidents: 'INC',
 	collections: 'COLL'
 };
+
+// ---- custom tables ---------------------------------------------------------
+// Tables built in Admin → Data live in the backend's custom_tables registry.
+// Each definition synthesizes a ModuleConfig here, so every existing view —
+// table, board, group, calendar, forms, detail page — works on user-built
+// tables with no view code knowing the difference. Rows are served at
+// /x/<key> (see ModuleConfig.endpoint).
+
+export interface CustomTableDef {
+	id: number;
+	name: string;
+	key: string;
+	fields: FieldSpec[];
+	row_count?: number;
+}
+
+export function synthesizeModule(def: CustomTableDef): ModuleConfig {
+	const fields = def.fields ?? [];
+	const selects = fields.filter((f) => f.type === 'select').map((f) => f.name);
+	const firstDate = fields.find((f) => f.type === 'date' || f.type === 'datetime');
+	// Long-text fields don't table well; everything else becomes a column, the
+	// column picker handles any excess.
+	const columns: Column[] = fields
+		.filter((f) => f.type !== 'textarea')
+		.map((f) => ({
+			header: f.label,
+			field: f.name,
+			...(f.type === 'select' ? { render: 'badge' as const } : {}),
+			...(f.type === 'tags' ? { render: 'tags' as const } : {})
+		}));
+	if (!columns.some((c) => c.field === 'tags'))
+		columns.push({ header: 'Tags', field: 'tags', render: 'tags', hidden: true });
+	const views: ViewKind[] = ['table'];
+	if (selects.length) views.push('board', 'group');
+	if (firstDate) views.push('calendar');
+	return {
+		key: def.key,
+		endpoint: `x/${def.key}`,
+		custom: true,
+		label: def.name,
+		singular: def.name.replace(/s$/i, '').toLowerCase() || 'record',
+		titleField: 'title',
+		columns,
+		fields,
+		views,
+		groupFields: [...selects, ...(fields.some((f) => f.type === 'tags') ? ['tags'] : [])],
+		dateField: firstDate?.name,
+		defaultSort: { field: 'title', dir: 'asc' }
+	};
+}
+
+// Replace the registered custom modules with `defs`. Mutates MODULES in
+// place so getModule() and every static consumer see them; runs in the root
+// layout's universal load, i.e. before any component reads the registry.
+export function registerCustomModules(defs: CustomTableDef[]) {
+	for (let i = MODULES.length - 1; i >= 0; i--) if (MODULES[i].custom) MODULES.splice(i, 1);
+	for (const def of defs) {
+		if (MODULES.some((m) => m.key === def.key)) continue; // never shadow a built-in
+		MODULES.push(synthesizeModule(def));
+		MODULE_CODES[def.key] ??=
+			def.key.replace(/[^a-z]/g, '').slice(0, 4).toUpperCase() || 'TBL';
+	}
+}
+
+// The API path for a module's rows — custom tables live behind /x/<key>.
+export const apiKey = (mod: ModuleConfig): string => mod.endpoint ?? mod.key;

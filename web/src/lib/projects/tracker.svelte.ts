@@ -3,10 +3,10 @@
 // optimistically to Svelte 5 `$state` and persist through `sync.ts`.
 import { goto } from '$app/navigation';
 import { toast } from 'svelte-sonner';
-import { isoToday, type Project, type ProjFile, type Song } from './data';
+import { isoToday, type FileStatus, type Project, type ProjFile, type Song } from './data';
 import { inheritedPath, wouldCycle } from './inherit';
 import { emptyReady, kindInfo, presetPhases } from './kinds';
-import { mapProject, toProjEvent, toProjNote, toTask } from './map';
+import { mapProject, toMerch, toProjEvent, toProjNote, toTask } from './map';
 import { persist } from './sync';
 
 export type ListView = 'board' | 'list' | 'timeline';
@@ -33,13 +33,21 @@ export class Tracker {
 
 	// The People database (id + name), for linking project people to records.
 	directory = $state<{ id: string; name: string }[]>([]);
+	// Merch rows no project has claimed — inventory's "link existing" pool.
+	merchPool = $state<{ id: string; name: string; stock: number }[]>([]);
 
 	constructor(
 		initial: Project[],
-		opts?: { defaultView?: string; defaultLayout?: string; directory?: { id: string; name: string }[] }
+		opts?: {
+			defaultView?: string;
+			defaultLayout?: string;
+			directory?: { id: string; name: string }[];
+			merchPool?: { id: string; name: string; stock: number }[];
+		}
 	) {
 		this.projects = initial;
 		if (opts?.directory) this.directory = opts.directory;
+		if (opts?.merchPool) this.merchPool = opts.merchPool;
 		if (opts?.defaultView && ['board', 'list', 'timeline'].includes(opts.defaultView))
 			this.listView = opts.defaultView as ListView;
 		if (opts?.defaultLayout && ['console', 'focus'].includes(opts.defaultLayout))
@@ -164,13 +172,14 @@ export class Tracker {
 			const res = await fetch(`/projects/${id}/files`);
 			if (!res.ok) return;
 			const { items } = (await res.json()) as {
-				items: { rel: string; name: string; kind: string; seq?: boolean; count?: number }[];
+				items: { rel: string; name: string; kind: string; seq?: boolean; count?: number; mtime?: number }[];
 			};
 			p.files = items.map(
 				(it): ProjFile => ({
 					name: it.name,
 					rel: it.rel,
 					kind: it.kind,
+					mtime: it.mtime,
 					meta: it.seq ? `sequence · ${it.count} frames` : it.kind
 				})
 			);
@@ -403,6 +412,25 @@ export class Tracker {
 		links.splice(i, 1);
 		this.saveDetails(pid);
 	}
+	// Hero cover: pin a file as the page's preview; clearing lets the newest
+	// file promote itself again.
+	setCover(pid: string, rel?: string) {
+		const p = this.find(pid);
+		if (!p || (p.details?.cover ?? undefined) === rel) return;
+		p.details = p.details ?? {};
+		p.details.cover = rel;
+		this.saveDetails(pid);
+	}
+	// File lifecycle: draft/final/archived per rel path; clearing removes the key.
+	setFileStatus(pid: string, rel: string, status?: FileStatus) {
+		const p = this.find(pid);
+		if (!p || (p.details?.fileStatus?.[rel] ?? undefined) === status) return;
+		p.details = p.details ?? {};
+		p.details.fileStatus = p.details.fileStatus ?? {};
+		if (status) p.details.fileStatus[rel] = status;
+		else delete p.details.fileStatus[rel];
+		this.saveDetails(pid);
+	}
 	// Print specs — a flat merge into details.print.
 	setPrintSpec(pid: string, patch: Record<string, string>) {
 		const p = this.find(pid);
@@ -467,6 +495,49 @@ export class Tracker {
 		if (!p || p[field] === next) return;
 		p[field] = next;
 		void persist.update(pid, { [field]: next || null });
+	}
+
+	// ---- inventory: merch rows linked to this project ------------------------
+	async addMerch(pid: string, draft: { name: string; stock?: number; price?: number }) {
+		const p = this.find(pid);
+		if (!p || !draft.name.trim()) return;
+		const row = await persist.merchCreate({
+			name: draft.name.trim(),
+			stock: draft.stock ?? 0,
+			price: draft.price ?? null,
+			project_id: Number(pid)
+		});
+		if (row) p.merch.push(toMerch(row));
+	}
+	updateMerch(pid: string, mid: string, patch: { stock?: number; price?: number; cost?: number }) {
+		const m = this.find(pid)?.merch.find((x) => x.id === mid);
+		if (!m) return;
+		Object.assign(m, patch);
+		void persist.merch(mid, patch);
+	}
+	linkMerch(pid: string, mid: string) {
+		const p = this.find(pid);
+		const i = this.merchPool.findIndex((x) => x.id === mid);
+		if (!p || i < 0) return;
+		const [pooled] = this.merchPool.splice(i, 1);
+		p.merch.push({ id: pooled.id, name: pooled.name, stock: pooled.stock, category: '', sku: '' });
+		void persist.merch(mid, { project_id: Number(pid) });
+	}
+	unlinkMerch(pid: string, mid: string) {
+		const p = this.find(pid);
+		const i = p?.merch.findIndex((x) => x.id === mid) ?? -1;
+		if (!p || i < 0) return;
+		const [m] = p.merch.splice(i, 1);
+		this.merchPool.push({ id: m.id, name: m.name, stock: m.stock });
+		void persist.merch(mid, { project_id: null });
+	}
+
+	setSubkind(pid: string, value: string) {
+		const p = this.find(pid);
+		const next = value.trim();
+		if (!p || (p.subkind ?? '') === next) return;
+		p.subkind = next || undefined;
+		void persist.update(pid, { subkind: next || null });
 	}
 
 	// ---- umbrella linking (songs → album, sub-projects → rebuild, …) ---------

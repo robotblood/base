@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import utcnow
+from app.revisions import checkpoint
 
 # Columns we never let a client set directly.
 _PROTECTED = {"id", "created_at", "updated_at"}
@@ -32,6 +33,9 @@ def make_crud_router(
     # rows rather than stored (see app/inherit.py). Takes the rows and a
     # session, returns one dict per row.
     decorate: Callable[[list, Session], list[dict]] | None = None,
+    # Checkpoint the old state before updates (app/revisions.py). Enabled for
+    # modules whose rows hold real work (notes bodies, project documents).
+    revisions: bool = False,
 ) -> APIRouter:
     router = APIRouter(prefix=f"/{name}", tags=[name])
     settable = {f for f in model.model_fields if f not in _PROTECTED}
@@ -65,6 +69,12 @@ def make_crud_router(
             raise HTTPException(422, f"'{title_field}' is required")
         obj = model()
         _apply(obj, payload)
+        # A record made here has a known creation time: now. Only the importers
+        # leave source_created_at null, and only where the export genuinely
+        # recorded none — see Base.source_created_at. Without this every record
+        # created in base would read as "creation date unknown" and sort last.
+        if obj.source_created_at is None:
+            obj.source_created_at = obj.created_at
         session.add(obj)
         session.commit()
         session.refresh(obj)
@@ -82,6 +92,8 @@ def make_crud_router(
         obj = session.get(model, item_id)
         if not obj:
             raise HTTPException(404, "not found")
+        if revisions:
+            checkpoint(session, name, obj)
         _apply(obj, payload)
         obj.updated_at = utcnow()
         session.add(obj)

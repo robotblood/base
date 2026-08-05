@@ -6,6 +6,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
+	import MarkdownField from '$lib/components/MarkdownField.svelte';
 	import DateField from '$lib/components/DateField.svelte';
 	import DateTimeField from '$lib/components/DateTimeField.svelte';
 	import TagPicker from '$lib/components/TagPicker.svelte';
@@ -44,9 +45,14 @@
 	}
 	const asType = (t: FieldType) => (t === 'number' ? 'number' : 'text');
 
-	// Long-text fields are markdown: a per-field Preview toggle renders the
-	// current textarea content. The textarea stays in the DOM (just hidden) so
-	// the form still submits it.
+	// A long-text field marked `rich` is edited as a document (block editor with
+	// the "/" menu, tables and buttons); the rest stay a plain box with a
+	// Preview toggle. Both store markdown, so a field can be switched over
+	// without touching its data.
+	const isRich = (f: FieldSpec) => f.type === 'textarea' && Boolean(f.rich);
+
+	// Preview state for the plain long-text fields. The textarea stays in the
+	// DOM (just hidden) so the form still submits it.
 	let previewing = $state<Record<string, boolean>>({});
 	let previewText = $state<Record<string, string>>({});
 	function togglePreview(name: string) {
@@ -57,6 +63,12 @@
 		previewing[name] = !previewing[name];
 	}
 </script>
+
+{#snippet fieldLabel(f: FieldSpec)}
+	<Label for={f.name} class="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+		{f.label}{#if f.required}<span class="text-signal"> *</span>{/if}
+	</Label>
+{/snippet}
 
 <div class={layout === 'row' ? 'flex flex-wrap items-end gap-x-5 gap-y-3' : 'grid gap-4'}>
 	{#each shown as f (f.name)}
@@ -72,15 +84,24 @@
 				/>
 				{f.label}
 			</label>
+		{:else if isRich(f)}
+			<div class={layout === 'row' ? 'grid min-w-[170px] flex-1 gap-1.5' : 'grid gap-1.5'}>
+				<!-- The label rides into the editor's own toolbar so it shares a row
+				     with the Doc/Markdown toggle, the way every other field's label
+				     shares one with its control. -->
+				<MarkdownField
+					name={f.name}
+					value={scalarValue(f, value)}
+					placeholder={f.placeholder}
+					compact
+				>
+					{#snippet header()}{@render fieldLabel(f)}{/snippet}
+				</MarkdownField>
+			</div>
 		{:else}
 			<div class={layout === 'row' ? 'grid min-w-[170px] max-w-[260px] flex-1 gap-1.5' : 'grid gap-1.5'}>
 				<div class="flex items-center justify-between">
-					<Label
-						for={f.name}
-						class="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground"
-					>
-						{f.label}{#if f.required}<span class="text-signal"> *</span>{/if}
-					</Label>
+					{@render fieldLabel(f)}
 					{#if f.type === 'textarea'}
 						<button
 							type="button"

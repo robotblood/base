@@ -1,7 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { getModule } from '$lib/modules';
+import { apiKey, getModule } from '$lib/modules';
 import { api } from '$lib/server/api';
+import { ensureCustomModules } from '$lib/server/customTables';
 import { coerce } from '$lib/coerce';
 import { loadRelationOptions, loadTagSuggestions } from '$lib/server/relations';
 import type { Item } from '$lib/types';
@@ -10,11 +11,12 @@ import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export const load: PageServerLoad = async ({ params }) => {
+	await ensureCustomModules();
 	const mod = getModule(params.module);
 	if (!mod) throw error(404, `Unknown module: ${params.module}`);
 	let item: Item;
 	try {
-		item = await api.get(mod.key, params.id);
+		item = await api.get(apiKey(mod), params.id);
 	} catch {
 		throw error(404, `No ${mod.singular} #${params.id}`);
 	}
@@ -60,20 +62,22 @@ export const load: PageServerLoad = async ({ params }) => {
 
 export const actions: Actions = {
 	update: async ({ params, request }) => {
+		await ensureCustomModules();
 		const mod = getModule(params.module);
 		if (!mod) throw error(404);
 		try {
-			await api.update(mod.key, params.id, coerce(mod.fields, await request.formData()));
+			await api.update(apiKey(mod), params.id, coerce(mod.fields, await request.formData()));
 		} catch (e) {
 			return fail(502, { message: e instanceof Error ? e.message : String(e) });
 		}
 		return { ok: true };
 	},
 	delete: async ({ params }) => {
+		await ensureCustomModules();
 		const mod = getModule(params.module);
 		if (!mod) throw error(404);
 		try {
-			await api.remove(mod.key, params.id);
+			await api.remove(apiKey(mod), params.id);
 		} catch (e) {
 			return fail(502, { message: e instanceof Error ? e.message : String(e) });
 		}
@@ -85,11 +89,12 @@ export const actions: Actions = {
 	// to xdg-open as an argument (no shell), so it can't be used for injection.
 	// Requires base to run on the same machine/desktop session as the files.
 	open: async ({ params }) => {
+		await ensureCustomModules();
 		const mod = getModule(params.module);
 		if (!mod) throw error(404);
 		let item: Item;
 		try {
-			item = await api.get(mod.key, params.id);
+			item = await api.get(apiKey(mod), params.id);
 		} catch {
 			return fail(404, { message: 'Record not found.' });
 		}

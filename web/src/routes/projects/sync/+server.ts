@@ -19,6 +19,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ ok: true });
 	}
 	if (op === 'person-create') return json(await api.create('people', data));
+	if (op === 'merch') return json(await api.update('merch', id, patch));
+	if (op === 'merch-create') return json(await api.create('merch', data));
 	if (op === 'event-create') return json(await api.create('events', data));
 	if (op === 'event-delete') {
 		await api.remove('events', id);

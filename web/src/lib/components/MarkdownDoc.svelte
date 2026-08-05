@@ -9,7 +9,7 @@
 	const html = $derived(marked.parse(source, { async: false, gfm: true, breaks: true }));
 </script>
 
-<div class="md-doc text-[14px] leading-[1.65] text-foreground/85">
+<div class="md-doc text-[14px] leading-[1.55] text-foreground/85">
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html html}
 </div>
@@ -19,19 +19,19 @@
 		font-size: 22px;
 		font-weight: 800;
 		letter-spacing: -0.01em;
-		margin: 1.1em 0 0.4em;
+		margin: 1em 0 0.35em;
 	}
 	.md-doc :global(h2) {
 		font-size: 17px;
 		font-weight: 700;
-		margin: 1.1em 0 0.35em;
+		margin: 0.95em 0 0.3em;
 	}
 	.md-doc :global(h3) {
 		font-size: 14.5px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		margin: 1em 0 0.3em;
+		margin: 0.9em 0 0.25em;
 	}
 	.md-doc :global(h1:first-child),
 	.md-doc :global(h2:first-child),
@@ -39,11 +39,11 @@
 		margin-top: 0.1em;
 	}
 	.md-doc :global(p) {
-		margin: 0.45em 0;
+		margin: 0.3em 0;
 	}
 	.md-doc :global(ul),
 	.md-doc :global(ol) {
-		margin: 0.45em 0;
+		margin: 0.3em 0;
 		padding-left: 1.4em;
 	}
 	.md-doc :global(ul) {
@@ -53,14 +53,14 @@
 		list-style: decimal;
 	}
 	.md-doc :global(li) {
-		margin: 0.18em 0;
+		margin: 0.12em 0;
 	}
 	.md-doc :global(li input[type='checkbox']) {
 		margin-right: 0.45em;
 	}
 	.md-doc :global(blockquote) {
 		border-left: 3px solid var(--border);
-		margin: 0.6em 0;
+		margin: 0.5em 0;
 		padding: 0.1em 0 0.1em 0.9em;
 		color: var(--muted-foreground);
 	}
@@ -76,7 +76,7 @@
 		border-radius: 8px;
 		padding: 10px 12px;
 		overflow-x: auto;
-		margin: 0.6em 0;
+		margin: 0.5em 0;
 	}
 	.md-doc :global(pre code) {
 		background: transparent;
@@ -113,6 +113,31 @@
 	.md-doc :global(img) {
 		max-width: 100%;
 		border-radius: 8px;
+	}
+	/* Note buttons — anchors carrying class="btn", written by the doc editor
+	   (components/editor/button.ts). Here they actually navigate. */
+	.md-doc :global(a.btn) {
+		display: inline-block;
+		margin: 0.15em 0.35em 0.15em 0;
+		padding: 3px 12px;
+		border: 1px solid transparent;
+		border-radius: 7px;
+		font-size: 12.5px;
+		font-weight: 600;
+		text-decoration: none;
+		text-underline-offset: 0;
+	}
+	.md-doc :global(a.btn[data-variant='primary']) {
+		background: var(--primary);
+		color: var(--primary-foreground);
+	}
+	.md-doc :global(a.btn[data-variant='secondary']) {
+		background: var(--card);
+		border-color: var(--border);
+		color: var(--foreground);
+	}
+	.md-doc :global(a.btn:hover) {
+		filter: brightness(1.1);
 	}
 	.md-doc :global(strong) {
 		font-weight: 700;

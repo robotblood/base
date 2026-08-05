@@ -66,6 +66,20 @@ export const SLASH_ITEMS: SlashItem[] = [
 		run: (e, r) => chain(e, r).toggleCodeBlock().run()
 	},
 	{
+		title: 'Table',
+		hint: '⌗',
+		keywords: 'table grid rows columns spreadsheet',
+		run: (e, r) => chain(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+	},
+	{
+		title: 'Button',
+		hint: '▭',
+		keywords: 'button link cta action',
+		// Inserts a stub and opens its settings dialog; cancelling there removes
+		// it again (see button.ts).
+		run: (e, r) => chain(e, r).insertNoteButton().run()
+	},
+	{
 		title: 'Divider',
 		hint: '---',
 		keywords: 'divider rule separator hr',
