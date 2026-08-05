@@ -224,4 +224,3 @@ the pages render server-side.
 - To add another Notion database, add a `Spec` to `importer/mappings.py`.
 - To surface a new module in the web app, register it in `app/main.py` (backend)
   and `web/src/lib/modules.ts` (front end).
-```
