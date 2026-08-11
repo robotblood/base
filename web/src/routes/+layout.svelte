@@ -3,14 +3,17 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import type { Snippet } from 'svelte';
 	import { page, updated } from '$app/state';
-	import { MODULES, MODULE_CODES } from '$lib/modules';
+	import { MODULES } from '$lib/modules';
+	import { buildNav } from '$lib/nav';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { ModeWatcher, toggleMode } from 'mode-watcher';
+	import CommandPalette from '$lib/components/chrome/CommandPalette.svelte';
 	import type { LayoutData } from './$types';
 	import Sun from '@lucide/svelte/icons/sun';
 	import Moon from '@lucide/svelte/icons/moon';
+	import Search from '@lucide/svelte/icons/search';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
@@ -39,41 +42,30 @@
 		});
 	});
 
-	type NavItem = {
-		code: string;
-		label: string;
-		href: string;
-		count: number | null;
-		rule?: boolean; // draw a separator above this item
-	};
-
-	const nav = $derived.by(() => {
-		const items: NavItem[] = [{ code: '~', label: 'Overview', href: '/', count: null }];
-		for (const m of MODULES) {
-			// Hidden modules (imported data not modelled yet) are reachable by URL
-			// and listed under /admin, but don't take a slot in the sidebar.
-			if (m.hidden) continue;
-			// The aggregated calendar and the shows pipeline sit where the events
-			// table lives — they're views over it (plus the other dated tables).
-			if (m.key === 'events') {
-				items.push({ code: 'CAL', label: 'Calendar', href: '/calendar', count: null });
-				items.push({ code: 'SHOW', label: 'Shows', href: '/shows', count: null });
-			}
-			items.push({
-				code: MODULE_CODES[m.key] ?? '',
-				label: m.label,
-				href: `/${m.key}`,
-				count: stats[m.key] ?? 0
-			});
-		}
-		// Admin sits below the data, ruled off — it operates the system rather
-		// than being part of it.
-		items.push({ code: 'SYS', label: 'Admin', href: '/admin', count: null, rule: true });
-		return items;
-	});
+	// The rail's shape lives in $lib/nav — which category each destination sits
+	// under, and which destinations are views over a table rather than tables.
+	const nav = $derived(buildNav(stats));
 
 	function isActive(href: string) {
 		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+	}
+
+	// A category unfolds while you're inside it — on its own page or down on
+	// one of its tables. Everywhere else it holds a single row, which is the
+	// whole point of the drill: seven rows at rest, detail only in context.
+	function isOpen(entry: { href: string; children?: { href: string }[] }) {
+		return isActive(entry.href) || (entry.children ?? []).some((c) => isActive(c.href));
+	}
+
+	// ⌘K from anywhere. Held here rather than inside the palette so the rail's
+	// own search button opens the same instance.
+	let paletteOpen = $state(false);
+
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			paletteOpen = !paletteOpen;
+		}
 	}
 </script>
 
@@ -104,33 +96,82 @@
 			</span>
 		</a>
 
-		<nav class="flex flex-1 flex-col gap-px overflow-y-auto py-2 pr-2">
-			{#each nav as item (item.href)}
-				{@const active = isActive(item.href)}
-				{#if item.rule}
+		<button
+			type="button"
+			onclick={() => (paletteOpen = true)}
+			class="mx-3 mb-2 flex items-center gap-2 rounded-[7px] border bg-background px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:border-signal/45"
+		>
+			<Search class="size-3.5" />
+			<span class="flex-1 text-left">Search or jump…</span>
+			<kbd class="rounded border px-1 py-px font-mono text-[10px] tracking-wide">⌘K</kbd>
+		</button>
+
+		<nav class="flex flex-1 flex-col overflow-y-auto py-1 pr-2">
+			{#each nav as section (section.key)}
+				{#if section.rule}
 					<div class="my-1.5 ml-3 mr-2 h-px bg-sidebar-border"></div>
 				{/if}
-				<a
-					href={item.href}
-					class={`group flex items-center gap-3 border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ${
-						active
-							? 'border-sidebar-primary bg-sidebar-accent text-sidebar-accent-foreground'
-							: 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-					}`}
-				>
-					<span
-						class={`w-11 shrink-0 font-mono text-[11px] tracking-wide ${active ? 'text-signal' : 'text-muted-foreground/70'}`}
+				{#if section.label}
+					<div
+						class="px-3 pb-1 pt-3 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground/70"
 					>
-						{item.code}
-					</span>
-					<span class="flex-1 truncate">{item.label}</span>
-					{#if item.count != null}
-						<span class="font-mono text-[11px] tabular-nums text-muted-foreground/80">{item.count}</span>
-					{/if}
-				</a>
-				{#if item.href === '/'}
-					<div class="my-1.5 ml-3 mr-2 h-px bg-sidebar-border"></div>
+						{section.label}
+					</div>
 				{/if}
+				{#each section.entries as item (item.href)}
+					{@const open = isOpen(item)}
+					{@const active =
+						isActive(item.href) && !(item.children ?? []).some((c) => isActive(c.href))}
+					<a
+						href={item.href}
+						class={`group flex items-center gap-3 border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ${
+							active
+								? 'border-sidebar-primary bg-sidebar-accent text-sidebar-accent-foreground'
+								: 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+						}`}
+					>
+						<span
+							class={`w-11 shrink-0 font-mono text-[11px] tracking-wide ${active || open ? 'text-signal' : 'text-muted-foreground/70'}`}
+						>
+							{item.code}
+						</span>
+						<span class="flex-1 truncate">{item.label}</span>
+						{#if item.count != null}
+							<span
+								class={`font-mono text-[11px] tabular-nums ${item.count === 0 ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}`}
+								>{item.count}</span
+							>
+						{/if}
+					</a>
+					{#if open && item.children?.length}
+						<!-- The drill-down: this category's tables, indented, only while
+						     you're inside it. Leaving the category folds them away. -->
+						{#each item.children as child (child.href)}
+							{@const childActive = isActive(child.href)}
+							<a
+								href={child.href}
+								class={`group flex items-center gap-3 border-l-2 py-1 pl-3 pr-2 text-[13px] transition-colors ${
+									childActive
+										? 'border-sidebar-primary bg-sidebar-accent text-sidebar-accent-foreground'
+										: 'border-transparent text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+								}`}
+							>
+								<span
+									class={`w-11 shrink-0 pl-3 font-mono text-[10px] tracking-wide ${childActive ? 'text-signal' : 'text-muted-foreground/50'}`}
+								>
+									{child.code}
+								</span>
+								<span class="flex-1 truncate">{child.label}</span>
+								{#if child.count != null}
+									<span
+										class={`font-mono text-[10px] tabular-nums ${child.count === 0 ? 'text-muted-foreground/40' : 'text-muted-foreground/70'}`}
+										>{child.count}</span
+									>
+								{/if}
+							</a>
+						{/each}
+					{/if}
+				{/each}
 			{/each}
 		</nav>
 
@@ -148,5 +189,7 @@
 	</main>
 </div>
 
+<svelte:window onkeydown={onKeydown} />
+<CommandPalette bind:open={paletteOpen} />
 <ModeWatcher />
 <Toaster richColors closeButton />

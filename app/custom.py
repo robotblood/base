@@ -21,9 +21,10 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
+from app import logs
 from app.db import get_session
-from app.models import CustomRow, CustomTable, utcnow
-from app.revisions import checkpoint
+from app.models import Archive, CustomRow, CustomTable, Revision, utcnow
+from app.revisions import checkpoint, checkpoint_delete
 
 KEY_RE = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 
@@ -67,7 +68,7 @@ def _get_table(session: Session, key: str) -> CustomTable:
 def make_custom_routers(reserved: set[str]) -> tuple[APIRouter, APIRouter]:
     """Build the /tables and /x/{key} routers. `reserved` is the set of real
     module endpoint names a custom table key must not shadow."""
-    taken = set(reserved) | {"tables", "x", "stats", "dashboard", "tags", "settings", "health", "logs"}
+    taken = set(reserved) | {"tables", "x", "fields", "stats", "dashboard", "tags", "settings", "health", "logs", "trash", "archives"}
 
     tables = APIRouter(prefix="/tables", tags=["tables"])
     rows = APIRouter(prefix="/x", tags=["custom rows"])
@@ -149,10 +150,33 @@ def make_custom_routers(reserved: set[str]) -> tuple[APIRouter, APIRouter]:
         if not t:
             raise HTTPException(404, "not found")
         # A table's rows have no life of their own — deleting the schema
-        # deletes the records, like dropping a real table would.
-        for r in session.exec(select(CustomRow).where(CustomRow.table_id == table_id)).all():
+        # deletes the records, like dropping a real table would. But a table
+        # with data serializes into the archive first (restorable under
+        # admin → archive); only an empty table just vanishes, because there
+        # is nothing to lose and archiving it would only pile up junk.
+        found = session.exec(select(CustomRow).where(CustomRow.table_id == table_id)).all()
+        if found:
+            session.add(
+                Archive(
+                    name=t.name,
+                    key=t.key,
+                    row_count=len(found),
+                    payload={
+                        "table": t.model_dump(mode="json"),
+                        "rows": [r.model_dump(mode="json") for r in found],
+                    },
+                )
+            )
+        for r in found:
             session.delete(r)
         session.delete(t)
+        if found:
+            logs.log(
+                "archive.table",
+                f"archived table '{t.name}' ({len(found)} rows)",
+                session=session,
+                detail={"key": t.key, "rows": len(found)},
+            )
         session.commit()
 
     # ---- rows ----------------------------------------------------------------
@@ -214,7 +238,108 @@ def make_custom_routers(reserved: set[str]) -> tuple[APIRouter, APIRouter]:
 
     @rows.delete("/{key}/{row_id}", status_code=204)
     def delete_row(key: str, row_id: int, session: Session = Depends(get_session)):
-        session.delete(_row(session, key, row_id))
+        r = _row(session, key, row_id)
+        checkpoint_delete(session, key, r)
+        session.delete(r)
         session.commit()
 
-    return tables, rows
+    return tables, rows, make_archives_router()
+
+
+def make_archives_router() -> APIRouter:
+    """Archived tables: list what's in the graveyard, rebuild one, purge one.
+
+        GET    /archives               list (no payloads — they can be large)
+        POST   /archives/{id}/restore  recreate the table and its rows
+        DELETE /archives/{id}          purge — the only true delete
+    """
+    archives = APIRouter(prefix="/archives", tags=["archives"])
+
+    @archives.get("")
+    def list_archives(session: Session = Depends(get_session)):
+        found = session.exec(
+            select(Archive).order_by(Archive.archived_at.desc())  # type: ignore[union-attr]
+        ).all()
+        return [
+            {
+                "id": a.id,
+                "name": a.name,
+                "key": a.key,
+                "row_count": a.row_count,
+                "archived_at": a.archived_at,
+            }
+            for a in found
+        ]
+
+    @archives.post("/{archive_id}/restore")
+    def restore_archive(archive_id: int, session: Session = Depends(get_session)):
+        a = session.get(Archive, archive_id)
+        if not a:
+            raise HTTPException(404, "not found")
+        t = CustomTable.model_validate(a.payload.get("table") or {})
+        # The key may have been retaken by a table built since; suffix rather
+        # than refuse — the restored data matters more than the exact slug.
+        base_key = t.key
+        for i in range(2, 100):
+            if not session.exec(select(CustomTable).where(CustomTable.key == t.key)).first():
+                break
+            t.key = f"{base_key}-{i}"
+        # Sequence-issued ids are never re-issued, so the original ids are
+        # normally free. Keeping them reconnects row revision history and any
+        # loose references; on the off chance one is taken, take a fresh id.
+        if t.id is not None and session.get(CustomTable, t.id):
+            t.id = None
+        session.add(t)
+        session.flush()  # need t.id for the rows
+        restored = 0
+        for rowdict in a.payload.get("rows") or []:
+            r = CustomRow.model_validate(rowdict)
+            if r.id is not None and session.get(CustomRow, r.id):
+                r.id = None
+            r.table_id = t.id
+            session.add(r)
+            restored += 1
+        # If the slug had to change, the rows' revision trail — update
+        # checkpoints and trashed siblings alike — still points at the old
+        # key. Re-key everything whose snapshot belongs to this table (the
+        # snapshot's table_id says so; a table now squatting the old key
+        # writes different row ids and table_ids, so there's no collision).
+        if t.key != base_key:
+            for rev in session.exec(select(Revision).where(Revision.module == base_key)).all():
+                if (rev.snapshot or {}).get("table_id") == t.id:
+                    rev.module = t.key
+                    session.add(rev)
+        session.delete(a)
+        logs.log(
+            "archive.restore",
+            f"restored table '{t.name}' ({restored} rows)",
+            session=session,
+            detail={"key": t.key, "rows": restored},
+        )
+        session.commit()
+        session.refresh(t)
+        return {**t.model_dump(), "row_count": restored}
+
+    @archives.delete("/{archive_id}", status_code=204)
+    def purge_archive(archive_id: int, session: Session = Depends(get_session)):
+        a = session.get(Archive, archive_id)
+        if not a:
+            raise HTTPException(404, "not found")
+        # Take the rows' leftover update checkpoints with it — with the
+        # archive gone they could never reconnect to anything.
+        row_ids = [r.get("id") for r in (a.payload.get("rows") or []) if r.get("id") is not None]
+        if row_ids:
+            for rev in session.exec(
+                select(Revision).where(Revision.module == a.key, Revision.record_id.in_(row_ids))  # type: ignore[attr-defined]
+            ).all():
+                session.delete(rev)
+        session.delete(a)
+        logs.log(
+            "archive.purge",
+            f"purged archived table '{a.name}' ({a.row_count} rows) — gone for good",
+            session=session,
+            detail={"key": a.key, "rows": a.row_count},
+        )
+        session.commit()
+
+    return archives

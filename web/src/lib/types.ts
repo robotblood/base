@@ -19,11 +19,10 @@ export interface FieldSpec {
 	ref?: string; // for relation: the module key this field links to
 	required?: boolean;
 	placeholder?: string;
-	// textarea only: edit it as a document (block editor, "/" menu, tables,
-	// buttons) instead of a plain box with a preview toggle. Worth it where the
-	// field is prose someone will structure; overkill on a one-line label. The
-	// stored value is markdown either way, so this is safe to flip per field.
-	rich?: boolean;
+	// Set at merge time on fields from the /fields registry — a user-added
+	// column on a built-in module. These are the only built-in fields the
+	// table header offers to edit; never stored, never sent back to the API.
+	ext?: boolean;
 }
 
 // A pickable option for a relation field: another record's id + display label.
@@ -143,6 +142,8 @@ export interface Thread {
 	due_effective: string | null;
 	due_from: string | null;
 	next_action: string | null;
+	// Done phases over named phases, percent; null when phases are unset.
+	progress: number | null;
 	counts: { tasks: number; notes: number; shows: number };
 	shows: ThreadShow[];
 	opens_at: string | null;

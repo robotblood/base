@@ -17,10 +17,22 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import utcnow
-from app.revisions import checkpoint
+from app.revisions import checkpoint, checkpoint_delete
 
-# Columns we never let a client set directly.
-_PROTECTED = {"id", "created_at", "updated_at"}
+# Columns we never let a client set directly. `extras` is in here because
+# clients see its contents flattened — a literal "extras" key would clobber
+# every user-added value on the row at once.
+_PROTECTED = {"id", "created_at", "updated_at", "extras"}
+
+
+def _flat(row) -> dict:
+    """One flat dict per row, user-added fields included — the same shape
+    custom rows use, so the web never has to know which kind it is reading.
+    Real columns win a name collision: the /fields registry refuses to create
+    one, so a clash means stale data, not a live field."""
+    d = dict(row) if isinstance(row, dict) else row.model_dump()
+    extras = d.pop("extras", None) or {}
+    return {**extras, **d}
 
 
 def make_crud_router(
@@ -42,9 +54,18 @@ def make_crud_router(
     order_field = order_by or title_field
 
     def _apply(obj, payload: dict):
+        # Unknown keys are user-added fields — collect them into the extras
+        # blob (reassigned whole so SQLAlchemy sees the JSONB change).
+        extras = dict(obj.extras or {})
+        extras_changed = False
         for key, value in payload.items():
             if key in settable:
                 setattr(obj, key, value)
+            elif key not in _PROTECTED:
+                extras[key] = value
+                extras_changed = True
+        if extras_changed:
+            obj.extras = extras
 
     @router.get("")
     def list_items(
@@ -61,7 +82,8 @@ def make_crud_router(
         stmt = stmt.order_by(order_col.desc() if desc else order_col)
         stmt = stmt.offset(offset).limit(limit)
         rows = session.exec(stmt).all()
-        return decorate(list(rows), session) if decorate else rows
+        out = decorate(list(rows), session) if decorate else rows
+        return [_flat(r) for r in out]
 
     @router.post("", status_code=201)
     def create_item(payload: dict, session: Session = Depends(get_session)):
@@ -78,14 +100,14 @@ def make_crud_router(
         session.add(obj)
         session.commit()
         session.refresh(obj)
-        return obj
+        return _flat(obj)
 
     @router.get("/{item_id}")
     def read_item(item_id: int, session: Session = Depends(get_session)):
         obj = session.get(model, item_id)
         if not obj:
             raise HTTPException(404, "not found")
-        return decorate([obj], session)[0] if decorate else obj
+        return _flat(decorate([obj], session)[0] if decorate else obj)
 
     @router.patch("/{item_id}")
     def update_item(item_id: int, payload: dict, session: Session = Depends(get_session)):
@@ -99,13 +121,17 @@ def make_crud_router(
         session.add(obj)
         session.commit()
         session.refresh(obj)
-        return obj
+        return _flat(obj)
 
     @router.delete("/{item_id}", status_code=204)
     def delete_item(item_id: int, session: Session = Depends(get_session)):
         obj = session.get(model, item_id)
         if not obj:
             raise HTTPException(404, "not found")
+        # Every module, not just the REVISIONED ones: updates are only worth
+        # checkpointing where a lost draft hurts, but a delete loses the whole
+        # record — the trash (app/trash.py) is the undo for that.
+        checkpoint_delete(session, name, obj)
         session.delete(obj)
         session.commit()
 

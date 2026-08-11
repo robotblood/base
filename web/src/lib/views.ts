@@ -74,6 +74,36 @@ function defaultGroupField(mod: ModuleConfig): string | null {
 	return mod.statusField ?? mod.groupFields?.[0] ?? null;
 }
 
+// ------------------------------------------------------- return-to-list state
+// Filter a list down, open a row, come back — without this the back link
+// dropped you on the bare table and you started over. The list records where
+// it was; the detail page's back link reads it.
+//
+// sessionStorage rather than localStorage on purpose: this is navigational, not
+// a preference. A filter you set last week shouldn't be waiting for you.
+
+const RETURN_KEY = (module: string) => `base:list:${module}`;
+
+export function rememberListUrl(module: string, search: string) {
+	if (typeof sessionStorage === 'undefined') return;
+	try {
+		if (search) sessionStorage.setItem(RETURN_KEY(module), search);
+		else sessionStorage.removeItem(RETURN_KEY(module));
+	} catch {
+		/* private mode / quota — the back link just falls back to the bare list */
+	}
+}
+
+/** The list URL to return to: the remembered view, or the plain table. */
+export function listUrl(module: string): string {
+	if (typeof sessionStorage === 'undefined') return `/${module}`;
+	try {
+		return `/${module}${sessionStorage.getItem(RETURN_KEY(module)) ?? ''}`;
+	} catch {
+		return `/${module}`;
+	}
+}
+
 // ------------------------------------------------------------------ sorting
 
 // A column sorts by its declared `sort`, else by the type of the matching form

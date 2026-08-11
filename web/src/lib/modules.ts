@@ -348,7 +348,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'due', label: 'Due', type: 'date' },
 			{ name: 'year', label: 'Year', type: 'text' },
 			{ name: 'path', label: 'Folder path', type: 'text' },
-			{ name: 'description', label: 'Description', type: 'textarea', rich: true },
+			{ name: 'description', label: 'Description', type: 'textarea' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group'],
@@ -457,7 +457,7 @@ export const MODULES: ModuleConfig[] = [
 			{ name: 'found_via', label: 'Found via', type: 'text' },
 			{ name: 'track', label: 'Track', type: 'text' },
 			{ name: 'next_action', label: 'Next action', type: 'text' },
-			{ name: 'notes', label: 'Notes', type: 'textarea', rich: true },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group', 'calendar'],
@@ -575,7 +575,7 @@ export const MODULES: ModuleConfig[] = [
 			},
 			{ name: 'url', label: 'URL', type: 'text' },
 			{ name: 'via', label: 'Found via', type: 'text' },
-			{ name: 'notes', label: 'Notes', type: 'textarea', rich: true },
+			{ name: 'notes', label: 'Notes', type: 'textarea' },
 			{ name: 'tags', label: 'Tags', type: 'tags' }
 		],
 		views: ['table', 'board', 'group'],
@@ -745,3 +745,68 @@ export function registerCustomModules(defs: CustomTableDef[]) {
 
 // The API path for a module's rows — custom tables live behind /x/<key>.
 export const apiKey = (mod: ModuleConfig): string => mod.endpoint ?? mod.key;
+
+// ---- extension fields on built-ins -----------------------------------------
+// The /fields registry adds user-defined columns to the real modules; values
+// live in each row's extras JSONB and arrive flattened, so merging the specs
+// into the ModuleConfig is all it takes for every view and form to see them.
+// The pristine code-defined config is kept untouched and a merged REPLACEMENT
+// object is spliced into MODULES — the page's `$derived(getModule(...))` only
+// re-renders on a new reference, so mutating in place would leave a saved
+// field invisible until a full reload. Skipped when a module's extensions
+// haven't changed, so ordinary navigations keep stable references.
+
+const PRISTINE = new Map<string, ModuleConfig>();
+const APPLIED = new Map<string, string>();
+
+export function applyModuleExtensions(extMap: Record<string, FieldSpec[]>) {
+	for (let i = 0; i < MODULES.length; i++) {
+		if (MODULES[i].custom) continue;
+		const key = MODULES[i].key;
+		if (!PRISTINE.has(key)) PRISTINE.set(key, MODULES[i]);
+		const base = PRISTINE.get(key)!;
+		const ext = (extMap[key] ?? []).map((f): FieldSpec => ({ ...f, ext: true }));
+		const sig = JSON.stringify(ext);
+		if (APPLIED.get(key) === sig) continue;
+		APPLIED.set(key, sig);
+		if (!ext.length) {
+			MODULES[i] = base;
+			continue;
+		}
+		// Same inference as synthesizeModule, but strictly additive: an extension
+		// can earn a module new views, never change what its code declared.
+		const selects = ext.filter((f) => f.type === 'select').map((f) => f.name);
+		const extTags = ext.filter((f) => f.type === 'tags').map((f) => f.name);
+		const views = [...(base.views ?? ['table'])];
+		if (selects.length) {
+			if (!views.includes('board')) views.push('board');
+			if (!views.includes('group')) views.push('group');
+		}
+		const extDate = ext.find((f) => f.type === 'date' || f.type === 'datetime');
+		let dateField = base.dateField;
+		if (!base.dateField && extDate) {
+			dateField = extDate.name;
+			if (!views.includes('calendar')) views.push('calendar');
+		}
+		MODULES[i] = {
+			...base,
+			fields: [...base.fields, ...ext],
+			columns: [
+				...base.columns,
+				...ext
+					.filter((f) => f.type !== 'textarea')
+					.map(
+						(f): Column => ({
+							header: f.label,
+							field: f.name,
+							...(f.type === 'select' ? { render: 'badge' as const } : {}),
+							...(f.type === 'tags' ? { render: 'tags' as const } : {})
+						})
+					)
+			],
+			groupFields: [...new Set([...(base.groupFields ?? []), ...selects, ...extTags])],
+			views,
+			dateField
+		};
+	}
+}

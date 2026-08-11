@@ -23,6 +23,8 @@
 		showDateLong,
 		showStatus
 	} from '$lib/projects/shows';
+	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
+	import MarkdownField from '$lib/components/MarkdownField.svelte';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import X from '@lucide/svelte/icons/x';
 
@@ -51,6 +53,16 @@
 		}
 	}
 	const saveDoc = () => patch({ show: $state.snapshot(doc) });
+	// The block editor reports every edit (the old textarea saved on blur), so
+	// notes ride a debounce like the record pages do.
+	let notesTimer: ReturnType<typeof setTimeout> | null = null;
+	function scheduleNotesSave() {
+		if (notesTimer) clearTimeout(notesTimer);
+		notesTimer = setTimeout(() => {
+			notesTimer = null;
+			void patch({ notes: ev.notes || null });
+		}, 800);
+	}
 	const num = (v: string): number | undefined => {
 		const n = parseInt(v.replace(/[^0-9]/g, ''), 10);
 		return isNaN(n) ? undefined : n;
@@ -626,21 +638,17 @@
 					<div>
 						<div class="{sectionLabel} mb-2.5">Tech &amp; Stage Notes</div>
 						{#if editMode}
-							<textarea
-								value={ev.notes}
-								rows="4"
+							<MarkdownField
+								bind:value={ev.notes}
 								placeholder="Power, backline, curfew…"
-								onchange={(e) => {
-									ev.notes = e.currentTarget.value;
-									void patch({ notes: ev.notes || null });
-								}}
-								class="w-full resize-y rounded-[10px] border bg-background/60 p-[14px_16px] text-[14px] leading-[1.6] text-foreground/75 outline-none focus:border-ring"
-							></textarea>
+								compact
+								onchange={() => scheduleNotesSave()}
+							/>
 						{:else if ev.notes}
 							<div
 								class="rounded-[10px] border bg-background/60 p-[14px_16px] text-[14px] leading-[1.6] text-foreground/75"
 							>
-								{ev.notes}
+								<MarkdownDoc source={ev.notes} />
 							</div>
 						{:else}
 							<div class="text-[13px] text-muted-foreground">

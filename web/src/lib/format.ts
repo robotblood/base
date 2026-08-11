@@ -16,3 +16,19 @@ export function fmt(value: unknown): string {
 	if (ISO_DATETIME.test(s)) return s.replace('T', ' ').slice(0, 19);
 	return s;
 }
+
+/**
+ * Timestamp-level "how long ago" — whole-day buckets are too coarse for a
+ * trail meant to say "you were just here". `updated_at` comes back
+ * timezone-naive but is stamped in UTC; parsed as-is the browser would read it
+ * as local time and everything would look hours younger than it is.
+ */
+export function relTime(iso: string | null | undefined): string {
+	if (!iso) return '';
+	const utc = /[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z';
+	const mins = Math.round((Date.now() - new Date(utc).getTime()) / 60000);
+	if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`;
+	if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+	const day = Math.round(mins / (60 * 24));
+	return day === 1 ? 'yesterday' : `${day}d ago`;
+}

@@ -5,7 +5,7 @@
 	// This static route overrides the generic /[module] page; data is real
 	// (FastAPI via the server load), mutations persist through /projects/sync.
 	import { onDestroy } from 'svelte';
-	import { browser } from '$app/environment';
+	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 	import { Tracker } from '$lib/projects/tracker.svelte';
 	import ProjectsListView from '$lib/components/projects/ProjectsListView.svelte';
@@ -22,17 +22,25 @@
 	const current = $derived(t.current);
 	onDestroy(() => t.stopWatch());
 
-	// Deep links (?open, ?tab, ?new) — applied in the browser only, since
-	// opening a project starts fetches and a folder watch.
-	if (browser) {
-		// svelte-ignore state_referenced_locally
+	// Deep links (?open, ?tab, ?new). SvelteKit reuses this component for
+	// in-app navigations to /projects, so ?open has to be watched, not read
+	// once at init — the command palette jumping from one open project to
+	// another changes only the query string. Keyed on the raw search string so
+	// the effect re-applies exactly when the URL changes and never when
+	// tracker state does (closing a project doesn't rewrite the URL, and the
+	// leftover ?open must not force the panel back open).
+	let applied = '';
+	$effect(() => {
+		const qs = page.url.search;
+		if (qs === applied) return;
+		applied = qs;
 		if (data.open && t.find(data.open)) {
 			t.openProject(data.open);
 			if (data.tab === 'rundown') t.wsTab = 'rundown';
 		} else if (data.startNew) {
 			t.newOpen = true;
 		}
-	}
+	});
 </script>
 
 <svelte:head><title>base — Projects</title></svelte:head>

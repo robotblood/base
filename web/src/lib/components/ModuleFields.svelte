@@ -3,9 +3,7 @@
 	// Shared by the create dialog (list) and the edit form (detail record).
 	import type { FieldSpec, FieldType, RelationOption } from '$lib/types';
 	import { Input } from '$lib/components/ui/input';
-	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
-	import MarkdownDoc from '$lib/components/MarkdownDoc.svelte';
 	import MarkdownField from '$lib/components/MarkdownField.svelte';
 	import DateField from '$lib/components/DateField.svelte';
 	import DateTimeField from '$lib/components/DateTimeField.svelte';
@@ -45,23 +43,6 @@
 	}
 	const asType = (t: FieldType) => (t === 'number' ? 'number' : 'text');
 
-	// A long-text field marked `rich` is edited as a document (block editor with
-	// the "/" menu, tables and buttons); the rest stay a plain box with a
-	// Preview toggle. Both store markdown, so a field can be switched over
-	// without touching its data.
-	const isRich = (f: FieldSpec) => f.type === 'textarea' && Boolean(f.rich);
-
-	// Preview state for the plain long-text fields. The textarea stays in the
-	// DOM (just hidden) so the form still submits it.
-	let previewing = $state<Record<string, boolean>>({});
-	let previewText = $state<Record<string, string>>({});
-	function togglePreview(name: string) {
-		if (!previewing[name]) {
-			const el = document.getElementById(name) as HTMLTextAreaElement | null;
-			previewText[name] = el?.value ?? '';
-		}
-		previewing[name] = !previewing[name];
-	}
 </script>
 
 {#snippet fieldLabel(f: FieldSpec)}
@@ -84,7 +65,9 @@
 				/>
 				{f.label}
 			</label>
-		{:else if isRich(f)}
+		{:else if f.type === 'textarea'}
+			<!-- Every long-text field edits like a note: the block editor with the
+			     "/" menu and a raw-markdown tab — one behavior everywhere. -->
 			<div class={layout === 'row' ? 'grid min-w-[170px] flex-1 gap-1.5' : 'grid gap-1.5'}>
 				<!-- The label rides into the editor's own toolbar so it shares a row
 				     with the Doc/Markdown toggle, the way every other field's label
@@ -102,26 +85,8 @@
 			<div class={layout === 'row' ? 'grid min-w-[170px] max-w-[260px] flex-1 gap-1.5' : 'grid gap-1.5'}>
 				<div class="flex items-center justify-between">
 					{@render fieldLabel(f)}
-					{#if f.type === 'textarea'}
-						<button
-							type="button"
-							onclick={() => togglePreview(f.name)}
-							class="cursor-pointer font-mono text-[10px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground/80"
-						>
-							{previewing[f.name] ? 'edit' : 'preview'}
-						</button>
-					{/if}
 				</div>
-				{#if f.type === 'textarea'}
-					<div class:hidden={previewing[f.name]}>
-						<Textarea id={f.name} name={f.name} value={scalarValue(f, value)} rows={4} />
-					</div>
-					{#if previewing[f.name]}
-						<div class="rounded-[9px] border bg-background px-3.5 py-2.5">
-							<MarkdownDoc source={previewText[f.name] ?? ''} />
-						</div>
-					{/if}
-				{:else if f.type === 'select'}
+				{#if f.type === 'select'}
 					{@const cur = value == null ? '' : String(value)}
 					<select id={f.name} name={f.name} class={selectCls}>
 						<option value="" selected={cur === ''}>—</option>

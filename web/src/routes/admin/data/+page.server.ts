@@ -44,7 +44,16 @@ export const load: PageServerLoad = async () => {
 		key: m.key,
 		label: m.label
 	}));
-	return { groups, tables, refTargets };
+	// The built-in modules, listed alongside the custom tables: code-defined
+	// fields are fixed, but each can grow extension fields (the /fields
+	// registry) from the same builder. ensureCustomModules() above already
+	// merged those in, so m.fields carries the ext flags.
+	const builtins = MODULES.filter((m) => !m.hidden && !m.custom).map((m) => ({
+		key: m.key,
+		label: m.label,
+		fields: m.fields
+	}));
+	return { groups, tables, refTargets, builtins };
 };
 
 // The field editor serializes its rows into one JSON form value; parse and
@@ -90,6 +99,39 @@ export const actions: Actions = {
 		bustCustomModulesCache();
 		return { ok: true };
 	},
+	// Replace a built-in module's extension-field list (see app/fields.py).
+	// The builder serializes only the user-added rows; code-defined fields
+	// never travel through here.
+	updateModuleFields: async ({ request }) => {
+		const form = await request.formData();
+		const module = form.get('module')?.toString() ?? '';
+		const fields = parseFields(form.get('fields'));
+		if (!module) return fail(400, { message: 'Bad module' });
+		if (!fields) return fail(422, { message: 'Bad field list' });
+		// The registry requires names to start with a letter; new rows slug
+		// client-side from the label, which may lead with a digit ("2026 Goals").
+		const seen = new Set<string>();
+		const cleaned = fields.map(({ ext: _ext, ...f }) => {
+			let name =
+				f.name
+					.toLowerCase()
+					.replace(/[^a-z0-9_]+/g, '_')
+					.replace(/^[^a-z]+|_+$/g, '')
+					.slice(0, 40) || 'field';
+			const base = name;
+			for (let i = 2; seen.has(name); i++) name = `${base}_${i}`;
+			seen.add(name);
+			return { ...f, name };
+		});
+		try {
+			await api.putModuleFields(module, cleaned);
+		} catch (e) {
+			return fail(502, { message: e instanceof Error ? e.message : String(e) });
+		}
+		bustCustomModulesCache();
+		return { ok: true };
+	},
+
 	deleteTable: async ({ request }) => {
 		const id = Number((await request.formData()).get('id'));
 		if (!Number.isInteger(id) || id <= 0) return fail(400, { message: 'Bad table id' });

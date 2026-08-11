@@ -51,6 +51,30 @@ def checkpoint(session: Session, module: str, obj: SQLModel) -> None:
         session.delete(r)
 
 
+def checkpoint_delete(session: Session, module: str, obj: SQLModel) -> None:
+    """Move a record into the trash as it is deleted.
+
+    Always snapshots — the interval collapse exists for autosave storms, and a
+    delete must capture the final state. The record's existing update
+    checkpoints flip to trash too, so restore brings its history back and
+    nothing orphaned lingers in the revisions table. Adds to the caller's
+    session; committed with the delete.
+    """
+    record_id = getattr(obj, "id", None)
+    if record_id is None:
+        return
+    for r in session.exec(
+        select(Revision).where(Revision.module == module, Revision.record_id == record_id)
+    ).all():
+        r.deleted = True
+        session.add(r)
+    session.add(
+        Revision(
+            module=module, record_id=record_id, snapshot=obj.model_dump(mode="json"), deleted=True
+        )
+    )
+
+
 router = APIRouter(prefix="/revisions", tags=["revisions"])
 
 
@@ -62,7 +86,13 @@ def list_revisions(
 ):
     rows = session.exec(
         select(Revision)
-        .where(Revision.module == module, Revision.record_id == record_id)
+        .where(
+            Revision.module == module,
+            Revision.record_id == record_id,
+            # Trash stays out of record history. IS NOT TRUE rather than
+            # == False: rows from before the column existed read NULL.
+            Revision.deleted.isnot(True),  # type: ignore[union-attr]
+        )
         .order_by(Revision.saved_at.desc())  # type: ignore[union-attr]
     ).all()
     # The list is for picking a point in time; snapshots come one at a time.

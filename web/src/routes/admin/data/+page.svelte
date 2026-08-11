@@ -9,8 +9,9 @@
 	const total = $derived(data.groups.reduce((n, g) => n + g.total, 0));
 	const setCount = $derived(data.groups.reduce((n, g) => n + g.sets.length, 0));
 
-	// Which builder is open: 'new', a table id, or nothing.
-	let building = $state<'new' | number | null>(null);
+	// Which builder is open: 'new', a custom table id, a built-in module key,
+	// or nothing.
+	let building = $state<'new' | number | string | null>(null);
 	let confirmDelete = $state<number | null>(null);
 </script>
 
@@ -20,7 +21,7 @@
 	<PageHeader
 		code="SYS"
 		title="Data"
-		subtitle={`${data.tables.length} custom ${data.tables.length === 1 ? 'table' : 'tables'} · ${setCount} imported ${setCount === 1 ? 'database' : 'databases'} (${total} rows)`}
+		subtitle={`${data.builtins.length} built-in modules · ${data.tables.length} custom ${data.tables.length === 1 ? 'table' : 'tables'} · ${setCount} imported ${setCount === 1 ? 'database' : 'databases'} (${total} rows)`}
 	/>
 
 	<div class="mt-6 max-w-3xl">
@@ -39,7 +40,8 @@
 		<p class="mb-4 max-w-prose text-[13.5px] leading-relaxed text-muted-foreground">
 			A table built here gets the full treatment — sidebar entry, table/board/group/calendar
 			views, forms, detail pages — from its field list alone. Pick fields from the palette;
-			change them any time.
+			change them any time. The built-in modules are here too: their code-defined fields are
+			fixed, but every one of them can grow fields of your own.
 		</p>
 
 		<section class="mb-8 overflow-hidden rounded-[12px] border bg-card">
@@ -72,11 +74,19 @@
 										}}
 								>
 									<input type="hidden" name="id" value={t.id} />
-									<button
-										class="cursor-pointer rounded-[6px] bg-destructive px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-white hover:opacity-90"
-										title="This deletes the table AND its {t.row_count ?? 0} rows"
-										>DELETE {t.row_count ?? 0} ROWS?</button
-									>
+									{#if t.row_count}
+										<button
+											class="cursor-pointer rounded-[6px] bg-destructive px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-white hover:opacity-90"
+											title="The table and its {t.row_count} rows move whole to Admin → Archive; restore any time"
+											>ARCHIVE {t.row_count} ROWS?</button
+										>
+									{:else}
+										<button
+											class="cursor-pointer rounded-[6px] bg-destructive px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-white hover:opacity-90"
+											title="An empty table has nothing to archive — this just deletes it"
+											>DELETE?</button
+										>
+									{/if}
 								</form>
 								<button
 									onclick={() => (confirmDelete = null)}
@@ -101,6 +111,30 @@
 							No custom tables yet — build the first one and it shows up in the sidebar.
 						</p>
 					{/if}
+				{/each}
+				{#each data.builtins as b (b.key)}
+					{@const added = b.fields.filter((f) => f.ext).length}
+					<div>
+						<div class="flex items-center justify-between gap-3 px-5 py-2.5">
+							<a href={`/${b.key}`} class="min-w-0 flex-1 truncate text-sm font-semibold hover:underline"
+								>{b.label}</a
+							>
+							<span class="font-mono text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60"
+								>built-in</span
+							>
+							<span class="font-mono text-[11px] text-muted-foreground"
+								>/{b.key} · {b.fields.length} fields{added ? ` (${added} added)` : ''} · {data.stats?.[b.key] ?? 0} rows</span
+							>
+							<button
+								onclick={() => (building = building === b.key ? null : b.key)}
+								class="cursor-pointer rounded-[6px] border px-2 py-1 font-mono text-[9px] tracking-[0.06em] text-muted-foreground hover:border-ring/40 hover:text-foreground/80"
+								>{building === b.key ? 'CLOSE' : 'FIELDS'}</button
+							>
+						</div>
+						{#if building === b.key}
+							<TableBuilder builtin={b} refTargets={data.refTargets} oncancel={() => (building = null)} />
+						{/if}
+					</div>
 				{/each}
 			</div>
 		</section>

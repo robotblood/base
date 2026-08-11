@@ -7,6 +7,7 @@
 	import type { PageData } from './$types';
 	import { cn } from '$lib/utils';
 	import { getModule, MODULE_CODES } from '$lib/modules';
+	import { listUrl } from '$lib/views';
 	import { fmt } from '$lib/format';
 	import ModuleFields from '$lib/components/ModuleFields.svelte';
 	import PageHeader from '$lib/components/chrome/PageHeader.svelte';
@@ -32,6 +33,13 @@
 	const code = $derived(MODULE_CODES[mod.key] ?? '');
 	const title = $derived(String(item[mod.titleField] ?? '') || `Untitled ${mod.singular}`);
 	const base = $derived(`/${data.moduleKey}/${item.id}`);
+	// Back to the list as you left it — filters, sort and grouping intact.
+	// Resolved on the client, so it starts as the bare list and firms up on
+	// hydration; sessionStorage doesn't exist during SSR.
+	let backHref = $state('');
+	$effect(() => {
+		backHref = listUrl(data.moduleKey);
+	});
 	const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 	const enc = (s: string) => encodeURIComponent(s);
 
@@ -317,7 +325,7 @@
 <div class="px-9 pb-14 pt-7">
 	<div class="flex flex-col gap-4">
 		<a
-			href={`/${mod.key}`}
+			href={backHref || `/${mod.key}`}
 			class="flex w-fit items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-3.5" />

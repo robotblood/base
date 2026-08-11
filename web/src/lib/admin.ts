@@ -22,6 +22,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		blurb: 'Imported databases that aren’t modelled yet'
 	},
 	{
+		key: 'archive',
+		label: 'Archive',
+		href: '/admin/archive',
+		blurb: 'Deleted tables, records, and leftover field values — restore or purge'
+	},
+	{
 		key: 'logs',
 		label: 'Logs',
 		href: '/admin/logs',
@@ -98,6 +104,37 @@ export const CHECK_LABELS: Record<string, string> = {
 	disk: 'Disk headroom',
 	linked_folders: 'Linked folders',
 	run: 'Last run'
+};
+
+/** `/archives` — a custom table serialized whole at deletion (app/custom.py). */
+export type ArchivedTable = {
+	id: number;
+	name: string;
+	key: string;
+	row_count: number;
+	archived_at: string;
+};
+
+/** `/trash` — one deleted record: its final state plus how many update
+ *  checkpoints came along with it (app/trash.py). */
+export type TrashEntry = {
+	revision_id: number;
+	module: string;
+	record_id: number;
+	title: string;
+	deleted_at: string;
+	history: number;
+};
+
+/** `/fields/orphans` — a removed field's values still waiting in rows'
+ *  extras/data JSONB (app/fields.py). Only keys with real values appear. */
+export type OrphanField = {
+	module: string;
+	kind: 'builtin' | 'custom';
+	key: string;
+	restorable: boolean;
+	rows: number;
+	sample: string;
 };
 
 export type BrokenPath = { id: number; label: string | null; path: string };

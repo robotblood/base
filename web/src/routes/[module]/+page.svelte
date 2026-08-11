@@ -12,6 +12,7 @@
 		groupItems,
 		isDateField,
 		readState,
+		rememberListUrl,
 		sortItems,
 		viewsFor,
 		writeState,
@@ -40,6 +41,12 @@
 
 	// ---- view state: read from the URL, written back by navigating ----------
 	const viewState = $derived(readState(page.url.searchParams, mod));
+
+	// Leave a trail so a record's back link can return to this exact view
+	// rather than the bare table.
+	$effect(() => {
+		rememberListUrl(mod.key, page.url.search);
+	});
 	const available = $derived(viewsFor(mod));
 	const viewItems = $derived(
 		available.map((v) => ({ value: v, label: VIEW_META[v].label, icon: VIEW_META[v].icon }))

@@ -12,6 +12,7 @@
 	import { isStatusField } from '$lib/status';
 	import { fmt } from '$lib/format';
 	import StatusDot from '$lib/components/chrome/StatusDot.svelte';
+	import FieldMenu from '$lib/components/views/FieldMenu.svelte';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
@@ -42,6 +43,16 @@
 			dir: viewState.sort === field && viewState.dir === 'asc' ? 'desc' : 'asc'
 		});
 	}
+
+	// Every table edits its schema right here: a pencil on each editable
+	// field's header, a "+" column at the far right. On a custom table that is
+	// everything but the pinned title; on a built-in module it is the fields
+	// the user added (spec.ext) — code-defined columns have no pencil.
+	const editableSpec = (field: string) => {
+		const spec = mod.fields.find((f) => f.name === field);
+		if (!spec) return null;
+		return (mod.custom ? spec.name !== mod.titleField : !!spec.ext) ? spec : null;
+	};
 </script>
 
 <div class="overflow-x-auto rounded-[12px] border bg-card">
@@ -49,30 +60,40 @@
 		<thead>
 			<tr class="border-b">
 				{#each columns as col (col.field)}
+					{@const spec = editableSpec(col.field)}
 					<!-- The title column absorbs the slack so every other column sizes
 					     to its content instead of wrapping in a squeezed cell. -->
 					<th
-						class="p-0 text-left font-normal {col.field === mod.titleField
+						class="group p-0 text-left font-normal {col.field === mod.titleField
 							? 'w-full'
 							: 'whitespace-nowrap'}"
 					>
-						<button
-							type="button"
-							onclick={() => sortBy(col.field)}
-							class="flex w-full cursor-pointer items-center gap-1 px-5 py-3 text-left font-mono text-[10px] tracking-[0.12em] transition-colors hover:text-foreground
-							{viewState.sort === col.field ? 'text-signal' : 'text-muted-foreground'}"
-						>
-							{col.header.toUpperCase()}
-							{#if viewState.sort === col.field}
-								{#if viewState.dir === 'asc'}
-									<ChevronUp class="size-3" />
-								{:else}
-									<ChevronDown class="size-3" />
+						<div class="flex items-center {spec ? 'pr-2' : ''}">
+							<button
+								type="button"
+								onclick={() => sortBy(col.field)}
+								class="flex w-full cursor-pointer items-center gap-1 px-5 py-3 text-left font-mono text-[10px] tracking-[0.12em] transition-colors hover:text-foreground
+								{viewState.sort === col.field ? 'text-signal' : 'text-muted-foreground'} {spec ? 'pr-1' : ''}"
+							>
+								{col.header.toUpperCase()}
+								{#if viewState.sort === col.field}
+									{#if viewState.dir === 'asc'}
+										<ChevronUp class="size-3" />
+									{:else}
+										<ChevronDown class="size-3" />
+									{/if}
 								{/if}
+							</button>
+							{#if spec}
+								<FieldMenu {spec} />
 							{/if}
-						</button>
+						</div>
 					</th>
 				{/each}
+				<!-- Notion-style: the last header cell grows the schema in place. -->
+				<th class="w-0 whitespace-nowrap p-0 text-left font-normal">
+					<FieldMenu />
+				</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -122,11 +143,12 @@
 							{/if}
 						</td>
 					{/each}
+					<td></td>
 				</tr>
 			{:else}
 				<tr>
 					<td
-						colspan={columns.length}
+						colspan={columns.length + 1}
 						class="h-24 text-center font-mono text-xs text-muted-foreground"
 					>
 						{empty}
