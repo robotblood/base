@@ -23,12 +23,25 @@
 		{ value: 'timeline' as const, label: 'Timeline' }
 	];
 
+	// Archive is a shelf, not a lane — it leaves the board (slim rail instead)
+	// but keeps its place in the pipeline bar's tally.
 	const columns = $derived(
-		STAGES.map((st) => {
+		STAGES.filter((st) => st.key !== 'Archive').map((st) => {
 			const cards = t.filtered.filter((p) => p.status === st.key);
 			return { ...st, count: cards.length, cards };
 		})
 	);
+	const archived = $derived(t.filtered.filter((p) => p.status === 'Archive'));
+
+	// The pipeline bar: every record, distributed across the stages. Segments
+	// get a floor so a stage with 1 of 81 records is still visible.
+	const pipeline = $derived.by(() => {
+		const total = t.projects.length || 1;
+		return STAGES.map((st) => {
+			const count = t.projects.filter((p) => p.status === st.key).length;
+			return { ...st, count, pct: Math.max(count ? 1.2 : 0, (100 * count) / total) };
+		});
+	});
 
 	// Timeline model — an 8-month window starting at the current month.
 	const MN = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -90,11 +103,40 @@
 		{/snippet}
 	</PageHeader>
 
+	<!-- The pipeline: where all the records sit, at a glance. -->
+	<div class="mb-4 rounded-[12px] border bg-card px-4 py-3">
+		<div class="flex justify-between font-mono text-[9.5px] tracking-[0.12em] text-muted-foreground">
+			<span>PIPELINE</span>
+			<span>{t.projects.length} RECORDS</span>
+		</div>
+		<div class="mt-2 flex h-2 gap-[2px] overflow-hidden rounded-[4px]">
+			{#each pipeline as seg (seg.key)}
+				{#if seg.count}
+					<span style="width:{seg.pct}%;background:{seg.color};" title="{seg.key} · {seg.count}"
+					></span>
+				{/if}
+			{/each}
+			<span class="flex-1 bg-border"></span>
+		</div>
+		<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-foreground/70">
+			{#each pipeline.filter((s) => s.key !== 'Archive') as seg (seg.key)}
+				<span
+					><span style="color:{seg.color};">●</span>
+					{seg.key.toLowerCase()}
+					{seg.count}</span
+				>
+			{/each}
+			<span class="ml-auto text-muted-foreground"
+				>archive {pipeline.find((s) => s.key === 'Archive')?.count ?? 0}</span
+			>
+		</div>
+	</div>
+
 	<!-- BOARD -->
 	{#if t.listView === 'board'}
 		<div class="flex items-start gap-4 overflow-x-auto pb-3.5">
 			{#each columns as col (col.key)}
-				<div class="flex w-[254px] flex-none flex-col">
+				<div class="flex {col.count ? 'w-[254px]' : 'w-[170px]'} flex-none flex-col">
 					<div class="flex items-center gap-2 px-1 pb-3">
 						<span
 							class="size-2 rounded-full"
@@ -153,10 +195,30 @@
 									Move → {nxt.key}
 								</div>
 							</div>
+						{:else}
+							<div
+								class="rounded-[10px] border border-dashed px-3 py-4 text-center font-mono text-[9.5px] text-muted-foreground/70"
+							>
+								empty
+							</div>
 						{/each}
 					</div>
 				</div>
 			{/each}
+
+			<!-- The shelf: archived records keep their count without keeping a lane. -->
+			<button
+				type="button"
+				onclick={() => (t.listView = 'list')}
+				class="flex w-11 flex-none cursor-pointer flex-col items-center gap-2.5 rounded-[12px] border bg-card py-3 transition-colors hover:border-ring/40"
+				title="Archived projects — open the list view"
+			>
+				<span
+					class="font-mono text-[9.5px] tracking-[0.16em] text-muted-foreground"
+					style="writing-mode:vertical-rl;">ARCHIVE</span
+				>
+				<span class="font-mono text-[11px] tabular-nums text-foreground/70">{archived.length}</span>
+			</button>
 		</div>
 	{/if}
 

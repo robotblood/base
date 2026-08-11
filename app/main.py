@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
@@ -6,19 +7,28 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, func, select
 
-from app import logs, models
+from app import assist, logs, models
 from app.custom import make_custom_routers
+from app.fields import make_fields_router
 from app.db import engine, init_db
 from app.health import db_health, path_health
 from app.inherit import decorate_projects
 from app.revisions import router as revisions_router
 from app.routers import make_crud_router
+from app.trash import make_trash_router, sweep
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Expired trash goes at startup too, not just when the trash is listed —
+    # a quiet month must not suspend the retention clock.
+    with Session(engine) as session:
+        sweep(session)
+    # The assist rules lane: one pass shortly after boot, then hourly at :00.
+    ticker = asyncio.create_task(assist.scheduler())
     yield
+    ticker.cancel()
 
 
 app = FastAPI(title="base — personal system API", version="0.1.0", lifespan=lifespan)
@@ -62,9 +72,19 @@ for model, name, title_field in MODULES:
         )
     )
 
-# User-defined tables: /tables (schema registry) + /x/{key} (row CRUD).
+# User-defined tables: /tables (schema registry), /x/{key} (row CRUD),
+# /archives (tables serialized at deletion, restorable).
 for router in make_custom_routers({name for _, name, _ in MODULES}):
     app.include_router(router)
+
+# The row trash: deleted records from every module, restorable until swept.
+app.include_router(make_trash_router(MODULES))
+
+# The assist queue: machine-proposed changes awaiting a human verdict.
+app.include_router(assist.router)
+
+# Extension fields on the built-in modules: /fields registry, values in extras.
+app.include_router(make_fields_router(MODULES))
 
 # Record history: list checkpoints, read one back.
 app.include_router(revisions_router)
@@ -218,6 +238,13 @@ def stats():
     with Session(engine) as session:
         for model, name, _ in MODULES:
             out[name] = session.exec(select(func.count()).select_from(model)).one()
+        # Not a module — the sidebar's Assist badge. The underscore keeps it
+        # out of every loop that treats stats keys as module names.
+        out["_assist_pending"] = session.exec(
+            select(func.count())
+            .select_from(models.Suggestion)
+            .where(models.Suggestion.status == "pending")
+        ).one()
     return out
 
 
@@ -251,6 +278,22 @@ def _next_action(phases) -> str | None:
         if name.lower() not in _PLACEHOLDER_PHASE:
             return name
     return None
+
+
+def _progress(phases) -> int | None:
+    """Done phases over named phases, as a percent — the redesign's thread
+    bars. None when the phases carry no information, so the bar can stay
+    unrendered instead of showing a confident 0%."""
+    rows = [
+        p
+        for p in (phases or [])
+        if isinstance(p, dict)
+        and str(p.get("name") or "").strip().lower() not in _PLACEHOLDER_PHASE
+    ]
+    if not rows:
+        return None
+    done = sum(1 for p in rows if p.get("status") == "done")
+    return round(100 * done / len(rows))
 
 
 @app.get("/dashboard")
@@ -334,6 +377,7 @@ def dashboard():
                     "due_effective": resolved.get("due_effective"),
                     "due_from": resolved.get("due_from"),
                     "next_action": _next_action(p.phases),
+                    "progress": _progress(p.phases),
                     "counts": {
                         "tasks": tasks.get(p.id, 0),
                         "notes": notes.get(p.id, 0),

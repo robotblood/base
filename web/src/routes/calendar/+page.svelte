@@ -109,6 +109,29 @@
 	const dayLabel = (s: string) =>
 		parse(s).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 	const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+	// The Up Next rail: what's bearing down, regardless of which month page is
+	// open. Overdue first (undone, slipped), then the next 60 days in order.
+	const upNext = $derived.by(() => {
+		const horizon = (() => {
+			const d = parse(todayISO);
+			d.setDate(d.getDate() + 60);
+			return iso(d);
+		})();
+		const overdue = visible
+			.filter((e) => !e.done && e.date < todayISO && e.module !== 'notes')
+			.slice(-3)
+			.map((e) => ({ e, overdue: true }));
+		const ahead = visible
+			.filter((e) => e.date >= todayISO && e.date <= horizon && !e.done)
+			.slice(0, 9)
+			.map((e) => ({ e, overdue: false }));
+		return [...overdue, ...ahead];
+	});
+	const shortMD = (s: string) =>
+		parse(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+	const daysLate = (s: string) =>
+		Math.round((parse(todayISO).getTime() - parse(s).getTime()) / 86400000);
 </script>
 
 <svelte:head><title>base — calendar</title></svelte:head>
@@ -128,7 +151,22 @@
 {/snippet}
 
 <div class="px-9 pb-14 pt-7">
-	<PageHeader code="CAL" title="Calendar" subtitle="everything dated, one grid" />
+	<PageHeader code="CAL" title="Calendar" subtitle="everything dated, one grid">
+		{#snippet actions()}
+			<!-- The category's drill-downs, mirrored from the rail: the show
+			     sheets and the raw events table behind this grid. -->
+			<a
+				href="/shows"
+				class="inline-flex items-center gap-2 rounded-[10px] border bg-card px-3.5 py-2 text-[13px] font-semibold text-foreground/80 transition-colors hover:border-ring/40 hover:bg-accent"
+				>Shows</a
+			>
+			<a
+				href="/events"
+				class="inline-flex items-center gap-2 rounded-[10px] border bg-card px-3.5 py-2 text-[13px] font-semibold text-foreground/80 transition-colors hover:border-ring/40 hover:bg-accent"
+				>Events</a
+			>
+		{/snippet}
+	</PageHeader>
 
 	<div class="mb-4 mt-6 flex flex-wrap items-center gap-3">
 		<div class="inline-flex gap-0.5 rounded-[8px] bg-muted p-[3px]">
@@ -185,6 +223,7 @@
 	{/if}
 
 	{#if mode === 'month'}
+		<div class="grid items-start gap-4 lg:grid-cols-[1fr_264px]">
 		<div class="overflow-hidden rounded-[12px] border bg-card">
 			<div class="grid grid-cols-7 border-b">
 				{#each DOW as d (d)}
@@ -232,6 +271,42 @@
 					{/each}
 				</div>
 			{/each}
+		</div>
+
+		<!-- What's bearing down — overdue pinned, then the next 60 days. -->
+		<div class="overflow-hidden rounded-[12px] border bg-card">
+			<div class="flex items-center justify-between border-b px-4 py-2.5">
+				<span class="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+					>Up next</span
+				>
+				<span class="font-mono text-[10px] text-muted-foreground/70">next 60d</span>
+			</div>
+			<div class="divide-y">
+				{#each upNext as u (u.e.id)}
+					<a
+						href={u.e.href}
+						class="flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-accent"
+					>
+						<span
+							class="w-[52px] flex-none font-mono text-[9.5px] {u.overdue
+								? 'text-destructive'
+								: 'text-muted-foreground'}"
+						>
+							{u.overdue ? 'OVERDUE' : shortMD(u.e.date)}
+						</span>
+						<span
+							class="size-1.5 flex-none rounded-full"
+							style="background:{colorOf(u.e.module)};"
+						></span>
+						<span class="min-w-0 flex-1 truncate text-[12.5px]">
+							{u.e.title || '(untitled)'}{u.overdue ? ` — ${daysLate(u.e.date)}d` : ''}
+						</span>
+					</a>
+				{:else}
+					<p class="px-4 py-3 font-mono text-xs text-muted-foreground">Nothing ahead.</p>
+				{/each}
+			</div>
+		</div>
 		</div>
 	{:else if mode === 'week'}
 		<div class="overflow-hidden rounded-[12px] border bg-card">

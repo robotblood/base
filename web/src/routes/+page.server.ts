@@ -1,7 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
-import type { DashboardData, DayFocus, FocusItem, WeekTask, WorkSession } from '$lib/types';
+import { moneyPulse, day, type MoneyPulse } from '$lib/server/money';
+import type { DashboardData, DayFocus, FocusItem, Item, WeekTask, WorkSession } from '$lib/types';
 
 // Monday of the current week, as YYYY-MM-DD — one weekly note per week.
 function mondayISO(): string {
@@ -84,6 +85,37 @@ function fmtDur(mins: number): string {
 	return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
 }
 
+// Sunday of the current week — the redesign's day strip runs Sun→Sat.
+function sundayISO(): string {
+	const now = new Date();
+	const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	d.setDate(d.getDate() - d.getDay());
+	const p = (n: number) => String(n).padStart(2, '0');
+	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export interface DayStripItem {
+	c: 'events' | 'todos' | 'projects' | 'notes';
+	t: string;
+	href: string;
+}
+export interface StripDay {
+	iso: string;
+	dow: string;
+	num: number;
+	today: boolean;
+	items: DayStripItem[];
+}
+
+export interface AssistBrief {
+	id: number;
+	kind: string;
+	source: string;
+	title: string;
+	why: string;
+	writes: string;
+}
+
 export const load: PageServerLoad = async () => {
 	let dashboard: DashboardData | null = null;
 	let apiError: string | null = null;
@@ -92,6 +124,10 @@ export const load: PageServerLoad = async () => {
 	let focus: DayFocus | null = null;
 	let session: WorkSession | null = null;
 	let tallyToday = 0;
+	let money: MoneyPulse | null = null;
+	let week: StripDay[] = [];
+	let assistTop: AssistBrief[] = [];
+	let assistPending = 0;
 	try {
 		// Threads, recent notes and loose ends all come from /dashboard now; the
 		// only things left to resolve here are the two quick-action targets, the
@@ -99,13 +135,58 @@ export const load: PageServerLoad = async () => {
 		// done-today tally.
 		dashboard = await api.dashboard();
 		const weeklyTitle = `Weekly — ${mondayISO()}`;
-		const [projects, weekly, focusRaw, tallyRaw, sessionRaw] = await Promise.all([
-			api.list('projects'),
-			api.list('notes', weeklyTitle),
-			api.getSetting('day_focus'),
-			api.getSetting('day_tally'),
-			api.getSetting('work_session')
-		]);
+		const [projects, weekly, focusRaw, tallyRaw, sessionRaw, txns, budgets, events, todos, pending] =
+			await Promise.all([
+				api.list('projects'),
+				api.list('notes', weeklyTitle),
+				api.getSetting('day_focus'),
+				api.getSetting('day_tally'),
+				api.getSetting('work_session'),
+				api.list('transactions').catch((): Item[] => []),
+				api.list('budgets').catch((): Item[] => []),
+				api.list('events').catch((): Item[] => []),
+				api.list('todos').catch((): Item[] => []),
+				api.assistSuggestions('pending').catch((): Item[] => [])
+			]);
+		money = moneyPulse(txns, budgets);
+		assistPending = pending.length;
+		assistTop = (pending as unknown as AssistBrief[])
+			.slice(0, 3)
+			.map(({ id, kind, source, title, why, writes }) => ({ id, kind, source, title, why, writes }));
+
+		// The Sun→Sat strip: everything dated that lands this week, colored by
+		// where it lives. Notes ride on their meeting_time (the weekly's stamp).
+		const sunday = new Date(sundayISO() + 'T00:00:00');
+		const strip = new Map<string, StripDay>();
+		for (let i = 0; i < 7; i++) {
+			const dt = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
+			const p2 = (n: number) => String(n).padStart(2, '0');
+			const iso = `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`;
+			strip.set(iso, {
+				iso,
+				dow: dt.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+				num: dt.getDate(),
+				today: iso === todayISO(),
+				items: []
+			});
+		}
+		const put = (iso: string | null, item: DayStripItem) => {
+			if (iso && strip.has(iso)) strip.get(iso)!.items.push(item);
+		};
+		for (const e of events)
+			put(day(e.starts_at), {
+				c: 'events',
+				t: String(e.title),
+				href: e.kind === 'performance' ? `/shows/${e.id}` : `/events/${e.id}`
+			});
+		for (const t of todos)
+			if (!['done', 'archived'].includes(String(t.status ?? '').toLowerCase()))
+				put(day(t.due), { c: 'todos', t: String(t.title), href: `/todos/${t.id}` });
+		for (const t of dashboard.threads)
+			put(day(t.due_effective ?? t.due), { c: 'projects', t: t.name, href: `/projects?open=${t.id}` });
+		for (const n of weekly)
+			put(day(n.meeting_time), { c: 'notes', t: String(n.title), href: `/notes/${n.id}` });
+		week = [...strip.values()];
 		const tr = tallyRaw as { date?: string; week_tasks?: number } | null;
 		if (tr?.date === todayISO()) tallyToday = tr.week_tasks ?? 0;
 		const sr = sessionRaw as Partial<WorkSession> | null;
@@ -137,7 +218,11 @@ export const load: PageServerLoad = async () => {
 		focus,
 		session,
 		tallyToday,
-		weekOf: mondayISO()
+		weekOf: mondayISO(),
+		money,
+		week,
+		assistTop,
+		assistPending
 	};
 };
 
@@ -282,10 +367,53 @@ export const actions: Actions = {
 		});
 		return { toggled: true };
 	},
-	// Quick capture: a bare todo, straight into the inbox, stay on the page.
+	// The suggestions panel's two verbs. Accept applies the row's action
+	// server-side (app/assist.py); both stay on the page — the reload shows
+	// the queue one shorter.
+	assistAccept: async ({ request }) => {
+		const id = Number((await request.formData()).get('id'));
+		if (id) await api.assistVerb(id, 'accept');
+		return { done: true };
+	},
+	assistDismiss: async ({ request }) => {
+		const id = Number((await request.formData()).get('id'));
+		if (id) await api.assistVerb(id, 'dismiss');
+		return { done: true };
+	},
+	// Quick capture, routed: the text lands in the table its type names, right
+	// now — "queued" would be a lie, so the row is simply created. The type
+	// comes from the client's guess (regex over the text) unless a chip was
+	// picked by hand; either way the server just honors it.
 	capture: async ({ request }) => {
-		const title = (await request.formData()).get('title')?.toString().trim();
-		if (title) await api.create('todos', { title, status: 'Not started' });
-		return { captured: true };
+		const form = await request.formData();
+		const title = form.get('title')?.toString().trim();
+		if (!title) return { captured: false };
+		const type = form.get('type')?.toString() ?? 'todo';
+		if (type === 'note') {
+			const made = await api.create('notes', { title, kind: 'note' });
+			return { captured: true, type, href: `/notes/${made.id}` };
+		}
+		if (type === 'txn') {
+			// "$40 strings" → amount 40. Captured spends default to expense —
+			// income rarely arrives as a hurried thought.
+			const amount = Number(/\$?(\d+(?:\.\d{1,2})?)/.exec(title)?.[1] ?? NaN);
+			const made = await api.create('transactions', {
+				name: title.replace(/\$?\d+(?:\.\d{1,2})?\s*/, '').trim() || title,
+				kind: 'expense',
+				...(Number.isFinite(amount) ? { amount } : {}),
+				occurred_on: todayISO()
+			});
+			return { captured: true, type, href: `/transactions/${made.id}` };
+		}
+		if (type === 'event') {
+			const made = await api.create('events', { title, kind: 'event' });
+			return { captured: true, type, href: `/events/${made.id}` };
+		}
+		if (type === 'proj') {
+			const made = await api.create('projects', { name: title, status: 'Not started' });
+			return { captured: true, type, href: `/projects?open=${made.id}` };
+		}
+		const made = await api.create('todos', { title, status: 'Not started' });
+		return { captured: true, type: 'todo', href: `/todos/${made.id}` };
 	}
 };

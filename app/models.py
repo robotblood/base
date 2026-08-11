@@ -27,6 +27,10 @@ class Base(SQLModel):
     source: Optional[str] = Field(default=None, index=True)
     tags: list[str] = Field(default_factory=list, sa_type=ARRAY(String))
     raw: dict = Field(default_factory=dict, sa_type=JSONB)
+    # Values for user-added fields (the /fields registry). The CRUD routers
+    # flatten these in and out, so the web reads them like real columns; the
+    # registry refuses names that would shadow one.
+    extras: dict = Field(default_factory=dict, sa_type=JSONB)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     # When the row was really made, as opposed to when base first saw it.
@@ -182,13 +186,19 @@ class Revision(SQLModel, table=True):
     record_id: int = Field(index=True)
     snapshot: dict = Field(default_factory=dict, sa_type=JSONB)
     saved_at: datetime = Field(default_factory=utcnow, index=True)
+    # True marks trash: the record was deleted and this checkpoint (plus any
+    # older ones, flipped when the delete lands) is what restore rebuilds from.
+    # Trash entries expire on a timer (app/trash.py); ordinary update
+    # checkpoints never carry the flag. Nullable because the column arrived by
+    # _ensure_columns — old rows read NULL, so filters compare IS TRUE.
+    deleted: Optional[bool] = Field(default=False, index=True)
 
 
 class CustomTable(Base, table=True):
     """A user-defined table: schema lives here, rows in CustomRow.
 
     Field definitions are a JSONB list of the web app's FieldSpec shape
-    ({name, label, type, options?, ref?, required?, rich?}) — they're always
+    ({name, label, type, options?, ref?, required?}) — they're always
     read and written whole with their table, so they don't earn a table of
     their own. The web synthesizes a ModuleConfig from this at load time and
     reuses every existing view (see web/src/lib/modules.ts).
@@ -208,6 +218,27 @@ class CustomRow(Base, table=True):
     table_id: int = Field(index=True)
     title: str = Field(default="", index=True)
     data: dict = Field(default_factory=dict, sa_type=JSONB)
+
+
+class Archive(SQLModel, table=True):
+    """A custom table serialized whole at deletion — schema and rows in one
+    JSONB payload, so the live tables carry no archived-anything flag.
+
+    Empty tables never land here (deleting one is a plain delete; there is
+    nothing to lose), which keeps this list from filling with abandoned
+    experiments. Restore rebuilds the table and rows from the payload;
+    purge is the only true delete in the system. Deliberately not Base —
+    like Revision, a snapshot needs none of the tags/raw/source apparatus.
+    """
+
+    __tablename__ = "archives"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str  # display label at archive time, e.g. "Documents"
+    key: str = Field(index=True)  # slug at archive time; may be retaken by a new table
+    row_count: int = 0
+    # {"table": {...CustomTable dump}, "rows": [{...CustomRow dump}]}
+    payload: dict = Field(default_factory=dict, sa_type=JSONB)
+    archived_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 class JobApplication(Base, table=True):
@@ -316,6 +347,61 @@ class Person(Base, table=True):
     about: Optional[str] = None
     membership_type: Optional[str] = None
     path: Optional[str] = None  # on-disk folder (photos, shared work) for media previews
+
+
+class Suggestion(SQLModel, table=True):
+    """One proposed change, waiting for a human verdict.
+
+    The assist system's whole contract lives in this table: any lane (the
+    deterministic rules, a cloud pass, someday a local model) may INSERT here,
+    and *nothing else* — no other table changes until Accept runs the row's
+    `action` through app/assist.py's apply handlers. `source` says who proposed
+    it, so lanes can be judged separately; the verdict columns are the training
+    record the local-model lane will eventually be evaluated against.
+
+    Deliberately not Base — a suggestion has no Notion origin, no tags, and
+    expires instead of being curated.
+    """
+
+    __tablename__ = "suggestions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    source: str = Field(index=True)  # "rule:<rule-id>" | "claude" | "model:<name>"
+    kind: str = Field(index=True)  # todo_triage | project | recurring | enrich
+    title: str  # the human sentence shown in the queue
+    why: str = ""  # provenance — the numbers that justify it
+    writes: str = ""  # human-readable target ("Todos"), shown next to Accept
+    # The machine payload Accept applies: {"op": "todos.set_due", ...}. An op
+    # the apply table doesn't know is refused at insert, not at accept.
+    action: dict = Field(default_factory=dict, sa_type=JSONB)
+    # Stable identity for suppression: the same observation must not pile up
+    # while pending, and must respect the cooldown after a dismissal.
+    dedupe_key: str = Field(index=True)
+    status: str = Field(default="pending", index=True)  # pending|accepted|dismissed|snoozed|expired
+    status_at: Optional[datetime] = None
+    snooze_until: Optional[date] = None
+    # Edit-before-accept keeps the original `title` untouched — the pair
+    # (what was proposed, what was actually accepted) is the eval set.
+    edited_title: Optional[str] = None
+    # Lane extras: enrichment bodies (markdown), applied-result ids, etc.
+    detail: dict = Field(default_factory=dict, sa_type=JSONB)
+
+
+class AssistPass(SQLModel, table=True):
+    """One run of a suggestion-generating lane — the Assist screen's log.
+
+    `scanned` records what the pass looked at (row counts per table), so the
+    screen can say "scanned 45 txns, 29 todos · 2 new" with real numbers.
+    """
+
+    __tablename__ = "assist_passes"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    at: datetime = Field(default_factory=utcnow, index=True)
+    source: str = Field(default="rules", index=True)  # rules | claude | model:<name>
+    scanned: dict = Field(default_factory=dict, sa_type=JSONB)
+    created: int = 0  # suggestions this pass added
+    suppressed: int = 0  # would-be suggestions skipped by dedupe/cooldown
+    note: Optional[str] = None
 
 
 class Setting(SQLModel, table=True):
