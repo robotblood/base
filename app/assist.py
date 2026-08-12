@@ -29,6 +29,7 @@ from app import models
 from app.db import engine, get_session
 from app.inherit import decorate_projects
 from app.logs import log
+from app.revisions import _aware
 
 router = APIRouter(prefix="/assist", tags=["assist"])
 
@@ -520,7 +521,10 @@ def run_rules_pass(session: Session) -> models.AssistPass:
         for s in existing
         if s.status == "dismissed"
         and s.status_at
-        and (now - s.status_at).days < DISMISS_COOLDOWN_DAYS
+        # _aware: status_at reads back naive from the TIMESTAMP column, and
+        # subtracting it from an aware utcnow() raises — which killed every
+        # pass the moment any dismissal existed (see revisions._aware).
+        and (now - _aware(s.status_at)).days < DISMISS_COOLDOWN_DAYS
     }
 
     # Pending rows the pass re-observes get their facts refreshed in place —
@@ -647,7 +651,9 @@ def create_suggestion(payload: dict, session: Session = Depends(get_session)):
     if any(s.status in ("pending", "snoozed", "accepted") for s in existing):
         return {"skipped": "duplicate", "dedupe_key": payload["dedupe_key"]}
     if any(
-        s.status == "dismissed" and s.status_at and (now - s.status_at).days < DISMISS_COOLDOWN_DAYS
+        s.status == "dismissed"
+        and s.status_at
+        and (now - _aware(s.status_at)).days < DISMISS_COOLDOWN_DAYS
         for s in existing
     ):
         return {"skipped": "dismissed_cooldown", "dedupe_key": payload["dedupe_key"]}

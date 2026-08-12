@@ -19,6 +19,9 @@ base/
 └── scripts/               # bootstrap / setup / dev / web / import
 ```
 
+A Rust rewrite of the API (axum + SQLx, same HTTP surface against the same
+database) is underway at [robotblood/base.](https://github.com/robotblood/base.).
+
 ## First-time setup
 
 1. **System packages + Postgres** (one command, needs sudo):
