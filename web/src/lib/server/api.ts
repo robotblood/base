@@ -2,7 +2,7 @@
 // guarantees it is never bundled into the browser — the API URL and all calls
 // stay on the SvelteKit server (the "no CORS" BFF pattern).
 import { env } from '$env/dynamic/private';
-import type { DashboardData, FieldSpec, Item, Stats } from '$lib/types';
+import type { DashboardData, FieldSpec, Item, ModuleConfig, Stats } from '$lib/types';
 
 const BASE = env.API_BASE_URL ?? 'http://127.0.0.1:8000';
 
@@ -32,6 +32,11 @@ export const api = {
 	tags: (module?: string) =>
 		req(`/tags${module ? `?module=${encodeURIComponent(module)}` : ''}`) as Promise<string[]>,
 	stats: () => req('/stats') as Promise<Stats>,
+	// The served module registry: built-in view config with the instance's
+	// overrides merged in (Rust server only — FastAPI 404s, and the layout
+	// degrades to the static modules.ts config).
+	modules: () =>
+		req('/modules') as Promise<{ modules: ModuleConfig[]; codes: Record<string, string> }>,
 	dashboard: () => req('/dashboard') as Promise<DashboardData>,
 	// Extension fields on built-in modules — see app/fields.py.
 	moduleFields: () => req('/fields') as Promise<Record<string, FieldSpec[]>>,

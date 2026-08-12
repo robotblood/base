@@ -680,6 +680,58 @@ export const MODULE_CODES: Record<string, string> = {
 	collections: 'COLL'
 };
 
+// ---- the served registry ----------------------------------------------------
+// The Rust server serves this same registry at /modules — defaults compiled
+// from this file, with the instance's overrides (the `modules` settings blob)
+// merged in. When the layout load gets a payload, it replaces the built-in
+// configs above, so customization lives in each instance's database instead
+// of a fork of this file. A null payload (FastAPI, API down) changes nothing:
+// the static config above stands.
+
+export interface ServerModulesPayload {
+	modules: ModuleConfig[];
+	codes: Record<string, string>;
+}
+
+// Same reference-stability trick as applyModuleExtensions below: pages derive
+// from getModule(), so an unchanged payload must not mint new objects.
+let SERVER_SIG = '';
+
+export function applyServerModules(payload: ServerModulesPayload | null | undefined) {
+	if (!payload?.modules?.length) return;
+	const sig = JSON.stringify(payload);
+	if (sig === SERVER_SIG) return;
+	SERVER_SIG = sig;
+	Object.assign(MODULE_CODES, payload.codes ?? {});
+	const incoming = payload.modules.map(fromServer);
+	// Payload order is authoritative for built-ins (it carries the instance's
+	// `order` override). Statically-declared modules the server doesn't know
+	// keep working after it, custom tables stay at the end.
+	const leftover = MODULES.filter(
+		(m) => !m.custom && !incoming.some((s) => s.key === m.key)
+	);
+	const custom = MODULES.filter((m) => m.custom);
+	MODULES.splice(0, MODULES.length, ...incoming, ...leftover, ...custom);
+	// Rebase the extension machinery: the served config is the new pristine
+	// base, and dropping the applied signature forces a re-merge onto it.
+	for (const m of incoming) {
+		PRISTINE.set(m.key, m);
+		APPLIED.delete(m.key);
+	}
+}
+
+// Status colors arrive as semantic STATE names ("progress", "done") so the
+// palette stays presentation-side; unknown values pass through, which lets an
+// override use raw hex.
+function fromServer(mod: ModuleConfig): ModuleConfig {
+	if (!mod.statusColors) return { ...mod };
+	const palette: Record<string, string> = STATE;
+	const statusColors: Record<string, string> = {};
+	for (const [value, name] of Object.entries(mod.statusColors))
+		statusColors[value] = palette[name] ?? name;
+	return { ...mod, statusColors };
+}
+
 // ---- custom tables ---------------------------------------------------------
 // Tables built in Admin → Data live in the backend's custom_tables registry.
 // Each definition synthesizes a ModuleConfig here, so every existing view —

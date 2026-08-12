@@ -16,6 +16,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		blurb: 'Typography, colour, shape — the tokens the whole app reads'
 	},
 	{
+		key: 'components',
+		label: 'Components',
+		href: '/admin/components',
+		blurb: 'The shared UI pieces rendered live — chrome, palette, fields, views'
+	},
+	{
 		key: 'data',
 		label: 'Data',
 		href: '/admin/data',
