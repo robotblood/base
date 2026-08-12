@@ -16,6 +16,7 @@ base/
 │   ├── mappings.py        # which Notion DB maps to which table
 │   └── run_import.py      # `python -m importer.run_import`
 ├── web/                   # SvelteKit web dashboard (front end)
+├── rust/                  # Rust port of the API (axum + SQLx) — see rust/README.md
 └── scripts/               # bootstrap / setup / dev / web / import
 ```
 
