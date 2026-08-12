@@ -1,11 +1,19 @@
 [Unit]
-Description=base — FastAPI backend
-# Postgres runs in Docker (restart: unless-stopped); api-serve.sh waits up to
-# 60s for it, then systemd retries below as a backstop.
+Description=base — API server (base-server, Rust)
+# Postgres runs in Docker (restart: unless-stopped); the server retries via
+# systemd below if it comes up first. The unit keeps the base-api name — the
+# self-checks and the health page key on it, and the API's identity hasn't
+# changed, only its implementation.
 StartLimitIntervalSec=0
 
 [Service]
-ExecStart=%h/base/scripts/api-serve.sh
+# The Rust port (github robotblood/base., cloned at ~/base-rust). It reads
+# ~/base/.env for DATABASE_URL via WorkingDirectory; API_PORT overrides its
+# :8001 side-by-side default to take over the dashboard's port.
+# The FastAPI line this replaced, kept for one-line rollback:
+#   ExecStart=%h/base/scripts/api-serve.sh
+ExecStart=%h/base-rust/target/release/base-server
+Environment=API_PORT=8000
 WorkingDirectory=%h/base
 Restart=always
 RestartSec=3

@@ -68,7 +68,7 @@ export type UnitHealth = {
 };
 
 const UNITS: { unit: string; label: string }[] = [
-	{ unit: 'base-api', label: 'API (FastAPI, :8000)' },
+	{ unit: 'base-api', label: 'API (base-server · Rust, :8000)' },
 	{ unit: 'base-web', label: 'Web (SvelteKit, :3000)' },
 	{ unit: 'base-backup.timer', label: 'Backup timer (daily)' }
 ];
