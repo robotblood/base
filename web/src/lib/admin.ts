@@ -22,6 +22,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		blurb: 'The shared UI pieces rendered live — chrome, palette, fields, views'
 	},
 	{
+		key: 'templates',
+		label: 'Templates',
+		href: '/admin/templates',
+		blurb: 'Reusable markdown blocks — insert from the “/” menu in any document field'
+	},
+	{
 		key: 'data',
 		label: 'Data',
 		href: '/admin/data',

@@ -6,6 +6,7 @@ import Suggestion, {
 	type SuggestionKeyDownProps,
 	type SuggestionProps
 } from '@tiptap/suggestion';
+import { expandTemplate, getTemplates } from '$lib/templates';
 
 export interface SlashItem {
 	title: string;
@@ -80,6 +81,14 @@ export const SLASH_ITEMS: SlashItem[] = [
 		run: (e, r) => chain(e, r).insertNoteButton().run()
 	},
 	{
+		title: 'Font specimen',
+		hint: 'Aa',
+		keywords: 'font specimen typeface type face sample',
+		// A line of text set in a face from the font library; the text is the
+		// sample — click in and type (see specimen.ts).
+		run: (e, r) => chain(e, r).insertFontSpecimen().run()
+	},
+	{
 		title: 'Divider',
 		hint: '---',
 		keywords: 'divider rule separator hr',
@@ -87,12 +96,26 @@ export const SLASH_ITEMS: SlashItem[] = [
 	}
 ];
 
+// User-authored markdown templates (Admin → Templates) join the menu after
+// the built-in blocks. Built fresh per open — the registry is refreshed by
+// the layout load, so a template saved in admin is insertable on the next
+// navigation without a reload. tiptap-markdown patches insertContent to
+// parse strings as markdown, which is what makes a plain-text body land as
+// real blocks.
+function templateItems(): SlashItem[] {
+	return getTemplates().map((t) => ({
+		title: t.name,
+		hint: '¶',
+		keywords: `template tpl ${t.name.toLowerCase()}`,
+		run: (e, r) => chain(e, r).insertContent(expandTemplate(t.body)).run()
+	}));
+}
+
 export function filterSlash(query: string): SlashItem[] {
+	const items = [...SLASH_ITEMS, ...templateItems()];
 	const q = query.trim().toLowerCase();
-	if (!q) return SLASH_ITEMS;
-	return SLASH_ITEMS.filter(
-		(i) => i.title.toLowerCase().includes(q) || i.keywords.includes(q)
-	);
+	if (!q) return items;
+	return items.filter((i) => i.title.toLowerCase().includes(q) || i.keywords.includes(q));
 }
 
 export interface SlashCallbacks {

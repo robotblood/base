@@ -1,5 +1,6 @@
 import type { LayoutLoad } from './$types';
 import { applyModuleExtensions, applyServerModules, registerCustomModules } from '$lib/modules';
+import { setTemplates } from '$lib/templates';
 
 // Register user-built tables as modules on BOTH sides. The server load
 // fetched the definitions; this universal load runs before any component
@@ -14,5 +15,7 @@ export const load: LayoutLoad = async ({ data }) => {
 	applyServerModules(data.serverModules);
 	registerCustomModules(data.customTables ?? []);
 	applyModuleExtensions(data.moduleFields ?? {});
+	// Markdown templates for the "/" menu — same both-sides registry pattern.
+	setTemplates(data.templates);
 	return data;
 };
