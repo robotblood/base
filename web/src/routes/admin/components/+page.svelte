@@ -12,6 +12,8 @@
 	import { VIEW_META } from '$lib/components/chrome/viewMeta';
 	import DateField from '$lib/components/DateField.svelte';
 	import DateTimeField from '$lib/components/DateTimeField.svelte';
+	import FontSpecimen from '$lib/components/FontSpecimen.svelte';
+	import { TYPEFACES, type Typeface } from '$lib/design/typefaces';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
@@ -23,6 +25,24 @@
 
 	let view = $state<ViewKind>('table');
 	let query = $state('');
+
+	// Specimen controls. Sample and size are shared across the sheet so faces
+	// are compared like for like; axis positions are per face, since "width
+	// 125" only means something on the face that has a width axis.
+	// One loaded face, one no-file face, one layered face — the three states.
+	const DEMO_FACES = TYPEFACES.filter((f) =>
+		['archivo', 'monument-extended', 'flor-de-ruina'].includes(f.id)
+	);
+	let sampleText = $state('ROBOTBLOOD');
+	let specimenSize = $state(46);
+	let axisState = $state<Record<string, Record<string, number>>>({});
+
+	const axesFor = (face: Typeface): Record<string, number> =>
+		axisState[face.id] ?? Object.fromEntries((face.axes ?? []).map((a) => [a.tag, a.def]));
+
+	function setAxis(face: Typeface, tag: string, value: number) {
+		axisState[face.id] = { ...axesFor(face), [tag]: value };
+	}
 
 	const viewItems = (Object.keys(VIEW_META) as ViewKind[]).map((v) => ({
 		value: v,
@@ -146,6 +166,77 @@
 			Fixed hex on purpose — these encode meaning, which must not invert between light and dark.
 			The served registry (<code class="font-mono">GET /modules</code>) refers to these by name
 			(“progress”, “done”), so a customized instance recolours by vocabulary, not by hex.
+		</p>
+	</div>
+
+	<!-- ——— type ——— -->
+	<h2 class="mb-3 mt-10 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+		Type — the specimen primitive
+	</h2>
+	<div class="rounded-[12px] border bg-card">
+		{@render demo(
+			'FontSpecimen',
+			'components/FontSpecimen.svelte',
+			'One typeface rendered in itself, from the $lib/design/typefaces registry (faces bundled — vendored woff2 or @fontsource — so specimens work offline). This is a demo of the component’s states, not the place type gets judged: in any note body, /font drops a specimen block whose text is the sample, with approve/reject on the block (components/editor/specimen.ts) — the shortlist and its verdicts live in the note that owns the job.'
+		)}
+
+		<div class="flex flex-wrap items-center gap-x-6 gap-y-3 border-b px-5 py-4">
+			<label class="flex items-center gap-2.5">
+				<span class="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+					Sample
+				</span>
+				<Input class="w-[220px]" bind:value={sampleText} placeholder="Type something…" />
+			</label>
+			<label class="flex items-center gap-2.5">
+				<span class="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+					Size
+				</span>
+				<input type="range" min="16" max="120" bind:value={specimenSize} class="w-[160px]" />
+				<span class="w-[46px] font-mono text-[12px] text-muted-foreground">{specimenSize}px</span>
+			</label>
+		</div>
+
+		<!-- Two states on purpose: a variable face with live axes, and a
+		     commercial entry honestly refusing to fake its specimen. -->
+		<div class="grid gap-x-6 gap-y-7 p-5 xl:grid-cols-2">
+			{#each DEMO_FACES as face (face.id)}
+				<div class="flex flex-col gap-2.5">
+					<FontSpecimen
+						{face}
+						sample={sampleText || undefined}
+						size={specimenSize}
+						axisValues={axesFor(face)}
+					/>
+					{#if face.axes?.length}
+						<div class="flex flex-wrap gap-x-5 gap-y-2">
+							{#each face.axes as axis (axis.tag)}
+								<label class="flex items-center gap-2">
+									<span
+										class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground"
+									>
+										{axis.label}
+									</span>
+									<input
+										type="range"
+										min={axis.min}
+										max={axis.max}
+										value={axesFor(face)[axis.tag]}
+										oninput={(e) => setAxis(face, axis.tag, +e.currentTarget.value)}
+										class="w-[110px]"
+									/>
+									<span class="w-[34px] font-mono text-[11px] text-muted-foreground">
+										{axesFor(face)[axis.tag]}
+									</span>
+								</label>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+		<p class="border-t px-5 py-3 text-[12px] leading-relaxed text-muted-foreground">
+			The full library is the registry in <code class="font-mono">$lib/design/typefaces.ts</code> —
+			{TYPEFACES.length} faces today. It renders wherever /font blocks live.
 		</p>
 	</div>
 

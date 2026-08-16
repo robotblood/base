@@ -3,10 +3,21 @@
 	// Content is the user's own notes on a local single-user system, so raw
 	// HTML pass-through from marked is acceptable here.
 	import { marked } from 'marked';
+	// Font specimen blocks (`<div class="specimen" data-face="…">`) come
+	// through that pass-through; their faces and styling live here.
+	import '$lib/design/typefaces.css';
 
 	let { source = '' }: { source?: string } = $props();
 
-	const html = $derived(marked.parse(source, { async: false, gfm: true, breaks: true }));
+	// Empty to-do slots (`- [ ]`, and the `- \[ \]` the editor used to write
+	// for them) don't register as GFM task items — marked wants text after the
+	// marker. Pad them with an invisible nbsp so they render as checkboxes;
+	// read-only here, so the pad never reaches stored markdown. The editor
+	// side of the same fix lives in editor/tasks.ts.
+	const padded = $derived(
+		source.replace(/^(\s*[-*+] )\\?\[( |x|X)\\?\][^\S\n]*$/gm, '$1[$2] &nbsp;')
+	);
+	const html = $derived(marked.parse(padded, { async: false, gfm: true, breaks: true }));
 </script>
 
 <div class="md-doc text-[14px] leading-[1.55] text-foreground/85">

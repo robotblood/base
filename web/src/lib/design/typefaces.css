@@ -1,0 +1,275 @@
+/* The font library's faces — everything the specimen component can render.
+ *
+ * Imported by FontSpecimen.svelte rather than by routes/layout.css, so the
+ * weight lands only on pages that actually show specimens. The library grows;
+ * layout.css is for the handful of families the *app itself* is set in, and
+ * the two lists should not merge as this one gets long.
+ *
+ * Libre faces from foundries that ship no npm package are vendored under
+ * static/typefaces (see the README there for licences and attribution);
+ * anything on Google Fonts comes through @fontsource like the UI families do.
+ */
+
+/* Google-hosted, via npm. `wdth` builds where the family has a width axis —
+   Archivo's reaches 125%, which is the whole reason it's here. */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource-variable/bricolage-grotesque/wdth.css';
+@import '@fontsource/michroma/400.css';
+
+/* Velvetyne, vendored. Family names are normalised to display case here —
+   the foundry's own stylesheet calls them terminal_grotesque etc. */
+@font-face {
+	font-family: 'Terminal Grotesque';
+	src: url('/typefaces/terminal_grotesque.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Terminal Grotesque Open';
+	src: url('/typefaces/terminal_grotesque_open.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Pilowlava';
+	src: url('/typefaces/pilowlava-regular.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Pilowlava Atome';
+	src: url('/typefaces/pilowlava-atome.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Flor de Ruina — five cuts of one life cycle (seed → germ → bloom →
+   fracture → ruin), drawn on shared metrics so they overlay exactly.
+   That registration is what makes the layered composite in typefaces.ts
+   possible: same text, several cuts, stacked. */
+
+@font-face {
+	font-family: 'Flor de Ruina Semilla';
+	src: url('/typefaces/flor-de-ruina-semilla.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Flor de Ruina Germen';
+	src: url('/typefaces/flor-de-ruina-germen.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Flor de Ruina Flor';
+	src: url('/typefaces/flor-de-ruina-flor.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Flor de Ruina Fractura';
+	src: url('/typefaces/flor-de-ruina-fractura.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Flor de Ruina Ruina';
+	src: url('/typefaces/flor-de-ruina-ruina.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* ——— specimen blocks in note bodies ———————————————————————————————————
+ *
+ * A note's markdown can carry `<div class="specimen" data-face="…">TEXT</div>`
+ * (written by the editor's /font block — components/editor/specimen.ts).
+ * MarkdownDoc renders that HTML verbatim, so the mapping from face id to
+ * actual font has to live in CSS — these rules are the static twins of the
+ * `family`/axes defaults in typefaces.ts. When registering a face there, add
+ * its rule here.
+ */
+
+.specimen {
+	display: block;
+	position: relative;
+	margin: 0.5em 0;
+	padding: 14px 18px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--background);
+	line-height: 1.12;
+	white-space: nowrap;
+	overflow-x: auto;
+}
+
+/* A verdict, when one has been given (data-status). Fixed hex on purpose,
+   matching $lib/status.ts: these encode meaning and must not invert between
+   light and dark. */
+.specimen[data-status]::after {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	padding: 1px 7px;
+	border: 1px solid currentColor;
+	border-radius: 5px;
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	line-height: 1.6;
+}
+
+.specimen[data-status='approved'] {
+	border-color: color-mix(in srgb, #2f7d5b 55%, var(--border));
+}
+.specimen[data-status='approved']::after {
+	content: 'approved';
+	color: #2f7d5b;
+}
+
+.specimen[data-status='rejected'] {
+	border-style: dashed;
+}
+.specimen[data-status='rejected']::after {
+	content: 'rejected';
+	color: #b23a26;
+}
+
+.specimen[data-face='archivo'] {
+	font-family: 'Archivo Variable', system-ui, sans-serif;
+	font-variation-settings: 'wght' 900, 'wdth' 125;
+}
+.specimen[data-face='michroma'] {
+	font-family: 'Michroma', system-ui, sans-serif;
+}
+.specimen[data-face='terminal-grotesque'] {
+	font-family: 'Terminal Grotesque', system-ui, sans-serif;
+}
+.specimen[data-face='terminal-grotesque-open'] {
+	font-family: 'Terminal Grotesque Open', system-ui, sans-serif;
+}
+.specimen[data-face='pilowlava'] {
+	font-family: 'Pilowlava', system-ui, sans-serif;
+}
+.specimen[data-face='pilowlava-atome'] {
+	font-family: 'Pilowlava Atome', system-ui, sans-serif;
+}
+.specimen[data-face='bricolage-grotesque'] {
+	font-family: 'Bricolage Grotesque Variable', system-ui, sans-serif;
+	font-variation-settings: 'wght' 700;
+}
+.specimen[data-face='flor-de-ruina-semilla'] {
+	font-family: 'Flor de Ruina Semilla', system-ui, sans-serif;
+}
+.specimen[data-face='flor-de-ruina-germen'] {
+	font-family: 'Flor de Ruina Germen', system-ui, sans-serif;
+}
+.specimen[data-face='flor-de-ruina-flor'] {
+	font-family: 'Flor de Ruina Flor', system-ui, sans-serif;
+}
+.specimen[data-face='flor-de-ruina-fractura'] {
+	font-family: 'Flor de Ruina Fractura', system-ui, sans-serif;
+}
+.specimen[data-face='flor-de-ruina-ruina'] {
+	font-family: 'Flor de Ruina Ruina', system-ui, sans-serif;
+}
+/* The layered composite can't stack inside a note's single element; a /font
+   block that picks it renders the Ruina cut. The real stack lives in the
+   library gallery (FontSpecimen renders `layers`). */
+.specimen[data-face='flor-de-ruina'] {
+	font-family: 'Flor de Ruina Ruina', system-ui, sans-serif;
+}
+
+/* The editor's node view around a specimen (specimen.ts). Controls appear
+   while the cursor is inside the sample text and stay out of the document
+   flow otherwise — a note of specimens should read as type, not as forms. */
+
+.specimen-node {
+	position: relative;
+}
+
+.specimen-node .specimen-controls {
+	display: none;
+	position: absolute;
+	top: -30px;
+	right: 8px;
+	z-index: 5;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 8px;
+	border: 1px solid var(--border);
+	border-radius: 7px;
+	background: var(--popover);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+/* Shown while the cursor is inside the block (selection tracked by the node
+   view) or on hover, for discoverability. */
+.specimen-node.is-active .specimen-controls,
+.specimen-node:hover .specimen-controls {
+	display: flex;
+}
+
+.specimen-node .specimen-controls select {
+	max-width: 180px;
+	border: 0;
+	background: transparent;
+	color: var(--foreground);
+	font-size: 12px;
+	outline: none;
+}
+
+.specimen-node .specimen-controls input[type='range'] {
+	width: 90px;
+}
+
+.specimen-node .specimen-controls span {
+	min-width: 38px;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--muted-foreground);
+}
+
+.specimen-node .specimen-controls .specimen-verdict {
+	padding: 2px 8px;
+	border: 1px solid var(--border);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--muted-foreground);
+	font-family: var(--font-mono);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	cursor: pointer;
+}
+
+.specimen-node .specimen-controls .specimen-verdict:hover {
+	color: var(--foreground);
+}
+
+.specimen-node .specimen-controls .specimen-verdict.is-on[data-verdict='approved'] {
+	border-color: #2f7d5b;
+	color: #2f7d5b;
+}
+
+.specimen-node .specimen-controls .specimen-verdict.is-on[data-verdict='rejected'] {
+	border-color: #b23a26;
+	color: #b23a26;
+}
