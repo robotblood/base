@@ -2,7 +2,8 @@
 	// Live block editor for note documents: markdown in, markdown out, but you
 	// edit formatted text. Typing shortcuts transform as you type (`# `, `- `,
 	// `1. `, `> `, `**bold**`, `` ` `` …), `[ ]` starts a to-do, and "/" opens
-	// the block menu (slash.ts).
+	// the block menu (slash.ts). Blocks reorder two ways: drag by the grip, or
+	// Alt-ArrowUp/Down (move.ts) when the drop target is fiddly.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Editor, Extension } from '@tiptap/core';
@@ -15,9 +16,12 @@
 	import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 	import { slashExtension, type SlashItem } from './slash';
 	import { HeadingExit } from './heading';
+	import { BlockMove } from './move';
 	import { MarkdownTable } from './table';
 	import { PlainText } from './text';
 	import { NoteButton, isExternal, type ButtonVariant, type NoteButtonAttrs } from './button';
+	import { FontSpecimenBlock } from './specimen';
+	import { EmptyTaskItems } from './tasks';
 	import ButtonDialog from './ButtonDialog.svelte';
 	import TableControls from './TableControls.svelte';
 
@@ -111,16 +115,24 @@
 		editor = new Editor({
 			element: host,
 			extensions: [
-				StarterKit.configure({ link: { openOnClick: false }, text: false }),
+				// trailingNode off: it force-appends an empty paragraph whenever the
+				// document ends in a heading, but markdown storage drops that
+				// paragraph on save — so it flickered in and out between edits and
+				// read like "# " creating two rows. Gapcursor still covers typing
+				// below a trailing table.
+				StarterKit.configure({ link: { openOnClick: false }, text: false, trailingNode: false }),
 				PlainText,
 				HeadingExit,
+				BlockMove,
 				TaskList,
 				TaskItem.configure({ nested: true }),
+				EmptyTaskItems,
 				MarkdownTable.configure({ resizable: true }),
 				TableRow,
 				TableHeader,
 				TableCell,
 				NoteButton.configure({ onEdit: openButtonDialog, onOpen: followButton }),
+				FontSpecimenBlock,
 				DragHandle.configure({
 					render() {
 						const el = document.createElement('div');
@@ -198,10 +210,12 @@
 
 {#if menu}
 	<div
-		class="fixed z-50 w-[260px] overflow-hidden rounded-[10px] border bg-popover shadow-[0_12px_40px_rgba(0,0,0,.18)]"
+		class="fixed z-50 max-h-[340px] w-[260px] overflow-y-auto rounded-[10px] border bg-popover shadow-[0_12px_40px_rgba(0,0,0,.18)]"
 		style="left:{menu.x}px;top:{menu.y}px;"
 	>
-		{#each menu.items as item, i (item.title)}
+		<!-- Keyed by position: user templates join the list, and a template is
+		     allowed to share a title with a built-in block. -->
+		{#each menu.items as item, i (i)}
 			<button
 				type="button"
 				onclick={() => applyItem?.(item)}
