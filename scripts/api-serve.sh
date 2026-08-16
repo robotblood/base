@@ -19,4 +19,7 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-exec ./.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+# -m uvicorn rather than bin/uvicorn: the console script's shebang embeds an
+# absolute venv path, which breaks if the project moves (and shebangs can't
+# hold the space in "01 Projects" at all). The interpreter itself relocates.
+exec ./.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
